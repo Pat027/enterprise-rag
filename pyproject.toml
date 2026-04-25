@@ -19,10 +19,8 @@ dependencies = [
     # Orchestration
     "langgraph>=0.2.50",
     "langchain-core>=0.3.20",
-    # LLM providers
-    "openai>=1.55.0",          # OpenRouter uses OpenAI-compatible API
-    "groq>=0.13.0",            # LlamaGuard 3 hosted
-    "anthropic>=0.40.0",       # Constitutional critic
+    # LLM client (vLLM exposes an OpenAI-compatible API; OpenAI Moderation also uses this SDK)
+    "openai>=1.55.0",
     # API
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",

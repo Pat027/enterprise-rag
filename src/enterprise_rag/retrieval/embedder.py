@@ -1,4 +1,4 @@
-"""BGE-M3 dense embeddings via sentence-transformers."""
+"""BGE-M3 dense embeddings via sentence-transformers, GPU-accelerated."""
 
 from __future__ import annotations
 
@@ -9,10 +9,24 @@ from sentence_transformers import SentenceTransformer
 from ..config import get_settings
 
 
+def _resolve_device(requested: str) -> str:
+    """Honor settings.embedder_device but fall back to cpu if CUDA is unavailable."""
+    if requested == "cpu":
+        return "cpu"
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return requested  # cuda or cuda:N
+    except ImportError:
+        pass
+    return "cpu"
+
+
 @lru_cache(maxsize=1)
 def _model() -> SentenceTransformer:
-    settings = get_settings()
-    return SentenceTransformer(settings.embedding_model)
+    s = get_settings()
+    return SentenceTransformer(s.embedding_model, device=_resolve_device(s.embedder_device))
 
 
 def embed_documents(texts: list[str]) -> list[list[float]]:

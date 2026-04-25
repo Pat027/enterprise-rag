@@ -1,19 +1,21 @@
-"""LlamaGuard 3 8B via Groq: policy-aware safety classification.
+"""LlamaGuard 3 8B served by local vLLM.
 
 LlamaGuard outputs either "safe" or "unsafe\\n<categories>" — we parse both forms.
-Groq runs LlamaGuard at sub-100ms latency for fractions of a cent per call.
+Self-hosted via vLLM on a dedicated L40S GPU for sub-100ms classification with
+no network dependency and no per-call cost.
 """
 
 from __future__ import annotations
 
-from groq import Groq
+from openai import OpenAI
 
 from ..config import get_settings
 from .types import SafetyVerdict
 
 
-def _client() -> Groq:
-    return Groq(api_key=get_settings().groq_api_key)
+def _client() -> OpenAI:
+    s = get_settings()
+    return OpenAI(api_key=s.vllm_guard_api_key, base_url=s.vllm_guard_url)
 
 
 def moderate(text: str, role: str = "user") -> SafetyVerdict:
@@ -21,9 +23,9 @@ def moderate(text: str, role: str = "user") -> SafetyVerdict:
     if not text.strip():
         return SafetyVerdict(layer="llamaguard", allowed=True)
 
-    settings = get_settings()
+    s = get_settings()
     completion = _client().chat.completions.create(
-        model=settings.groq_llamaguard_model,
+        model=s.vllm_guard_model,
         messages=[{"role": role, "content": text}],
         temperature=0,
         max_tokens=128,
@@ -31,9 +33,7 @@ def moderate(text: str, role: str = "user") -> SafetyVerdict:
     raw = (completion.choices[0].message.content or "").strip()
     lines = [line.strip() for line in raw.splitlines() if line.strip()]
     if not lines:
-        return SafetyVerdict(
-            layer="llamaguard", allowed=True, reason="empty response"
-        )
+        return SafetyVerdict(layer="llamaguard", allowed=True, reason="empty response")
 
     verdict = lines[0].lower()
     if verdict == "safe":

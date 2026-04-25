@@ -1,8 +1,8 @@
 """Constitutional critic: LLM-as-judge against a written policy.
 
-This is *not* a hosted Anthropic moderation API — Anthropic doesn't ship one.
-It's an implementation of the constitutional-AI critique pattern: ask Claude to
-score a response against explicit principles loaded from constitution.yaml.
+Uses the same local vLLM as generation (Llama 3.1 70B FP8) with a different
+system prompt — no separate model, no Anthropic dependency. The constitution
+is loaded from constitution.yaml and rendered into a structured judging prompt.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from anthropic import Anthropic
+from openai import OpenAI
 
 from ..config import get_settings
 from .types import SafetyVerdict
@@ -25,8 +25,9 @@ def _principles() -> list[dict]:
     return yaml.safe_load(_CONSTITUTION_PATH.read_text())["principles"]
 
 
-def _client() -> Anthropic:
-    return Anthropic(api_key=get_settings().anthropic_api_key)
+def _client() -> OpenAI:
+    s = get_settings()
+    return OpenAI(api_key=s.vllm_gen_api_key, base_url=s.vllm_gen_url)
 
 
 _JUDGE_PROMPT = """You are a safety auditor. Evaluate the assistant's response below \
@@ -50,7 +51,7 @@ Assistant's response:
 
 def critique(query: str, context: str, response: str) -> SafetyVerdict:
     """Audit `response` against the constitution. Block on any failed principle."""
-    settings = get_settings()
+    s = get_settings()
     principles_text = "\n".join(
         f"- {p['id']}: {p['rule'].strip()}" for p in _principles()
     )
@@ -58,15 +59,16 @@ def critique(query: str, context: str, response: str) -> SafetyVerdict:
         principles=principles_text, query=query, context=context, response=response
     )
 
-    msg = _client().messages.create(
-        model=settings.anthropic_critic_model,
-        max_tokens=512,
+    completion = _client().chat.completions.create(
+        model=s.vllm_gen_model,
         messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        max_tokens=512,
+        response_format={"type": "json_object"},
     )
-    raw = msg.content[0].text if msg.content else ""
+    raw = (completion.choices[0].message.content or "").strip()
 
     try:
-        # Tolerant parse — find first { and last }
         start, end = raw.find("{"), raw.rfind("}")
         data = json.loads(raw[start : end + 1])
         verdicts = data.get("verdicts", [])
