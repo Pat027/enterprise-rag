@@ -2,6 +2,22 @@
 
 An advanced document processing and retrieval-augmented generation system that runs **fully on-premises**: layout-aware ingestion, multi-layer safety, and self-hosted LLM inference on consumer-to-datacenter GPUs.
 
+## Performance
+
+Two rounds of vLLM optimization on a single L40S GPU, measured end-to-end through the full RAG pipeline (input safety → retrieve → rerank → generate → output safety → constitutional critic).
+
+| Metric | Baseline | Round 1 (FP8 + KV + prefix cache) | Round 2 (+ speculative decoding) | Total Δ |
+|---|---:|---:|---:|---:|
+| Mean latency (sequential) | 9.27 s | 7.42 s | **4.86 s** | **−48 %** |
+| **p50 latency** | 10.79 s | 7.78 s | **4.81 s** | **−55 %** |
+| p95 latency | 11.66 s | 8.80 s | **5.86 s** | **−50 %** |
+| Throughput (sequential) | 0.055 qps | 0.101 qps | **0.175 qps** | **+218 %** |
+| Throughput (concurrent, 4 inflight) | — | 0.200 qps | **0.349 qps** | *+75 % vs round 1* |
+| Generation-model weights memory | 14.99 GB | 8.49 GB | 8.49 GB | **−43 %** |
+
+Workload: HR-interview Q&A pipeline against an indexed PDF (`benchmarks/bench.py`).
+Per-flag rationale + trade-offs: **[`docs/vllm-optimization.md`](./docs/vllm-optimization.md)**.
+
 ## Why this exists
 
 Most RAG demos do the easy parts (embed text, vector search, prompt) and skip what actually breaks in production: parsing real documents with tables and scans, blocking unsafe inputs and outputs without latency tax, grounding answers with citations the user can verify, and avoiding lock-in to hosted LLM APIs that leak data and cost money per token.
