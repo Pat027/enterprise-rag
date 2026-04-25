@@ -1,0 +1,74 @@
+# CPU-dev profile — for laptops, kind, minikube, CI smoke tests.
+#
+# WARNING: this profile DISABLES the production safety stack (LlamaGuard +
+# constitutional critic) because we don't have a cheap CPU-friendly equivalent
+# of LlamaGuard 3 8B. It is for development only and is NOT a real safety
+# stack. Do NOT use in production.
+#
+# We swap vllm-gen and vllm-guard for a single Ollama deployment serving a
+# quantized Llama 3.1 8B. The api still talks OpenAI-compatible HTTP so
+# pointing VLLM_GEN_URL at Ollama's /v1 endpoint is enough.
+
+# Disable runtimeClassName — most CPU dev clusters don't have it.
+gpuOperator:
+  runtimeClassName: ""
+
+vllmGen:
+  enabled: false
+
+vllmGuard:
+  enabled: false
+
+ollama:
+  enabled: true
+  model: "llama3.1:8b-instruct-q4_K_M"
+  resources:
+    requests:
+      cpu: "2"
+      memory: "8Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+  persistence:
+    enabled: false
+
+api:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+      nvidia.com/gpu: 0
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+      nvidia.com/gpu: 0
+
+config:
+  EMBEDDER_DEVICE: "cpu"
+  RETRIEVAL_MODE: "bm25"
+  # Point the api at Ollama's OpenAI-compatible endpoint.
+  VLLM_GEN_URL: "http://{{ include \"enterprise-rag.fullname\" . }}-ollama:11434/v1"
+  VLLM_GEN_MODEL: "llama3.1:8b-instruct-q4_K_M"
+  # No LlamaGuard available — explicit disable.
+  SAFETY_LLAMAGUARD: "false"
+  SAFETY_CONSTITUTIONAL: "false"
+  SAFETY_OPENAI_MODERATION: "false"
+  # Guard URL still required by config; point at Ollama as a placeholder
+  # (it won't be called since SAFETY_LLAMAGUARD=false).
+  VLLM_GUARD_URL: "http://{{ include \"enterprise-rag.fullname\" . }}-ollama:11434/v1"
+  VLLM_GUARD_MODEL: "llama3.1:8b-instruct-q4_K_M"
+
+qdrant:
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+autoscaling:
+  enabled: false

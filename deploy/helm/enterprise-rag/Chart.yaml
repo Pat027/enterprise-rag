@@ -1,0 +1,19 @@
+apiVersion: v2
+name: enterprise-rag
+description: |
+  Enterprise RAG stack: FastAPI gateway + Qdrant + vLLM (generator) +
+  vLLM (LlamaGuard safety). Mirrors the reference docker-compose deployment
+  with sensible production defaults for Kubernetes.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - rag
+  - llm
+  - vllm
+  - qdrant
+  - llamaguard
+maintainers:
+  - name: enterprise-rag
+sources:
+  - https://github.com/Pat027/enterprise-rag

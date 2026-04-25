@@ -1,0 +1,99 @@
+{{- if .Values.ollama.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterprise-rag.fullname" . }}-ollama
+  labels:
+    {{- include "enterprise-rag.componentLabels" (dict "ctx" . "component" "ollama") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "enterprise-rag.selectorLabels" (dict "ctx" . "component" "ollama") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterprise-rag.selectorLabels" (dict "ctx" . "component" "ollama") | nindent 8 }}
+    spec:
+      volumes:
+        - name: ollama-data
+          {{- if .Values.ollama.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "enterprise-rag.fullname" . }}-ollama
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      containers:
+        - name: ollama
+          image: "{{ .Values.ollama.image.repository }}:{{ .Values.ollama.image.tag }}"
+          imagePullPolicy: {{ .Values.ollama.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              ollama serve &
+              SERVE_PID=$!
+              sleep 5
+              ollama pull {{ .Values.ollama.model }} || true
+              wait $SERVE_PID
+          ports:
+            - name: http
+              containerPort: 11434
+              protocol: TCP
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+            - name: OLLAMA_MODELS
+              value: /root/.ollama/models
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.ollama.resources | nindent 12 }}
+{{- if .Values.ollama.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "enterprise-rag.fullname" . }}-ollama
+  labels:
+    {{- include "enterprise-rag.componentLabels" (dict "ctx" . "component" "ollama") | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.ollama.persistence.size }}
+  {{- with .Values.ollama.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "enterprise-rag.fullname" . }}-ollama
+  labels:
+    {{- include "enterprise-rag.componentLabels" (dict "ctx" . "component" "ollama") | nindent 4 }}
+spec:
+  type: {{ .Values.ollama.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.ollama.service.port }}
+      targetPort: 11434
+      protocol: TCP
+  selector:
+    {{- include "enterprise-rag.selectorLabels" (dict "ctx" . "component" "ollama") | nindent 4 }}
+{{- end }}
