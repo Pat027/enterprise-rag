@@ -1,171 +1,65 @@
 [project]
-name = "nvidia_rag"
-version = "2.5.0.dev"
-description = "This blueprint serves as a reference solution for a foundational Retrieval Augmented Generation (RAG) pipeline."
+name = "enterprise-rag"
+version = "0.1.0"
+description = "Advanced document processing and retrieval-augmented generation system with layout-aware ingestion, multi-layer safety, and pluggable LLM providers."
 readme = "README.md"
-license = "Apache-2.0"
-license-files = [
-  "LICENSE"
-]
-
-authors = [
-    { name = "NVIDIA RAG", email = "foundational-rag-dev@exchange.nvidia.com" }
-]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
+authors = [{ name = "Pat027" }]
+license = { text = "MIT" }
+keywords = ["rag", "document-processing", "llm", "retrieval", "qdrant", "docling"]
 
 dependencies = [
-    "bleach>=6.2,<7.0",
-    "dataclass-wizard>=0.27,<1.0",
-    "fastapi>=0.115.5,<1.0",
-    "anyio>=4.12.0",
-    "httpx>=0.28.1",
-    "httpx-sse>=0.4.3",
-    "langchain>=1.2.7",
-    "langchain-community>=0.4",
-    "langchain-milvus>=0.3.0",
-    "langchain-nvidia-ai-endpoints>=1.2.0",
-    "minio>=7.2,<8.0",
-    "pdfplumber>=0.11.9",
-    "pydantic>=2.11,<3.0",
-    "pymilvus[milvus_lite]>=2.6.7,<3.0",
-    "pymilvus-model>=0.3,<1.0",
-    "python-multipart>=0.0.22,<1.0",
-    "pyyaml>=6.0,<7.0",
-    "uvicorn[standard]>=0.32,<1.0",
-    "langchain-core>=1.0.0",
-    "redis>=4.3.4",
-    "protobuf>=6.33.5",
-    "lark>=1.2.2",
-    "python-dateutil>=2.9.0.post0",
+    # Document parsing — layout, tables, OCR, figures
+    "docling>=2.10.0",
+    # Vector database
+    "qdrant-client>=1.12.0",
+    # Embeddings + reranker (BGE-M3, BGE-Reranker-v2-m3)
+    "sentence-transformers>=3.3.0",
+    "FlagEmbedding>=1.3.0",
+    # Orchestration
+    "langgraph>=0.2.50",
+    "langchain-core>=0.3.20",
+    # LLM providers
+    "openai>=1.55.0",          # OpenRouter uses OpenAI-compatible API
+    "groq>=0.13.0",            # LlamaGuard 3 hosted
+    "anthropic>=0.40.0",       # Constitutional critic
+    # API
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",  # File uploads
+    # Config + utilities
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "pyyaml>=6.0.2",
+    "structlog>=24.4.0",
 ]
 
 [project.optional-dependencies]
-rag = [
-    "langchain-openai>=0.2",
-    "opentelemetry-api>=1.29,<2.0",
-    "opentelemetry-exporter-otlp>=1.29,<2.0",
-    "opentelemetry-exporter-prometheus>=0.50b0,<1.0",
-    "opentelemetry-instrumentation>=0.50b0,<1.0",
-    "opentelemetry-instrumentation-fastapi>=0.50b0,<1.0",
-    "opentelemetry-instrumentation-milvus>=0.36,<1.0",
-    "opentelemetry-processor-baggage>=0.50b0,<1.0",
-    "opentelemetry-sdk>=1.29,<2.0",
-    "opentelemetry-sdk-extension-prometheus-multiprocess>=1.0,<2.0",
-    "prometheus-client>=0.20,<1.0",
-    "azure-core>=1.35,<2.0",
-    "azure-storage-blob>=12.26,<13.0",
-    "pyarrow>=21.0,<22.0",
-]
-ingest = [
-    # nv-ingest dependencies (required for ingestion operations)
-    "nv-ingest-api==26.1.2",
-    "nv-ingest-client==26.1.2",
-    "tritonclient==2.57.0",
-    # Other ingest dependencies
-    "langchain-openai>=0.2",
-    "overrides>=7.7,<8.0",
-    "tqdm>=4.67,<5.0",
-    "opentelemetry-api>=1.29,<2.0",
-    "opentelemetry-exporter-otlp>=1.29,<2.0",
-    "opentelemetry-exporter-prometheus>=0.50b0,<1.0",
-    "opentelemetry-instrumentation>=0.50b0,<1.0",
-    "opentelemetry-instrumentation-fastapi>=0.50b0,<1.0",
-    "opentelemetry-instrumentation-milvus>=0.36,<1.0",
-    "opentelemetry-processor-baggage>=0.50b0,<1.0",
-    "opentelemetry-sdk>=1.29,<2.0",
-    "azure-core>=1.35,<2.0",
-    "azure-storage-blob>=12.26,<13.0",
-    "pyarrow>=21.0,<22.0",
-    "setuptools>=80.10.2",
-]
-all = [
-    # nv-ingest dependencies (required for ingestion operations)
-    "nv-ingest-api==26.1.2",
-    "nv-ingest-client==26.1.2",
-    "tritonclient==2.57.0",
-    # RAG + Ingest dependencies
-    "langchain-openai>=0.2",
-    "overrides>=7.7,<8.0",
-    "tqdm>=4.67,<5.0",
-    "opentelemetry-api>=1.29,<2.0",
-    "opentelemetry-exporter-otlp>=1.29,<2.0",
-    "opentelemetry-exporter-prometheus>=0.50b0,<1.0",
-    "opentelemetry-instrumentation>=0.50b0,<1.0",
-    "opentelemetry-instrumentation-fastapi>=0.50b0,<1.0",
-    "opentelemetry-instrumentation-milvus>=0.36,<1.0",
-    "opentelemetry-processor-baggage>=0.50b0,<1.0",
-    "opentelemetry-sdk>=1.29,<2.0",
-    "azure-core>=1.35,<2.0",
-    "azure-storage-blob>=12.26,<13.0",
-    "pyarrow>=21.0,<22.0",
-    # Elasticsearch support
-    "langchain-elasticsearch>=0.3",
-]
-elasticsearch = [
-    "langchain-elasticsearch>=0.3",
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+    "ruff>=0.8.0",
 ]
 
-[tool.uv.sources]
-nvidia-rag = { workspace = true }
+[project.scripts]
+enterprise-rag = "enterprise_rag.cli:main"
 
-[tool.uv]
-# Pillow 12.x required for containers; moviepy pins pillow<12 so override needed for resolution
-override-dependencies = ["pillow>=12.1.0"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-include-package-data = true
+[tool.hatch.build.targets.wheel]
+packages = ["src/enterprise_rag"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-# Include all YAML files inside rag_server
-"nvidia_rag.rag_server" = ["*.yaml"]
-# Include the filter grammar file in utils
-"nvidia_rag.utils" = ["*.lark"]
-
-[project.urls]
-Homepage = "https://github.com/NVIDIA-AI-Blueprints/rag"
-Documentation = "https://github.com/NVIDIA-AI-Blueprints/rag/blob/main/README.md"
-
-# Linting and formatting configuration
 [tool.ruff]
+line-length = 100
 target-version = "py311"
-line-length = 88
 
 [tool.ruff.lint]
-select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
-]
-ignore = [
-    "E501",  # line too long, handled by ruff format
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
-    "F401",  # unused imports (intentionally imported for availability checks)
-    "B007",  # loop control variable not used (intentional in health check)
-]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+ignore = ["E501"]
 
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-
-[dependency-groups]
-docs = [
-    "myst-parser>=4.0.1",
-    "nvidia-sphinx-theme>=0.0.8",
-    "sphinx>=8.2.3",
-    "sphinx-autobuild>=2025.8.25",
-    "sphinx-autodoc2>=0.5.0",
-    "sphinx-copybutton>=0.5.2",
-    "sphinx-reredirects>=0.1.5",
-    "swagger-plugin-for-sphinx>=5.2.0",
-]
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
