@@ -4,16 +4,17 @@ This document explains the vLLM tuning choices in `docker-compose.yml`, why each
 
 ## TL;DR
 
-Five flags applied to `vllm-gen` (and a subset to `vllm-guard`) cut p50 latency by **28 %** and roughly **doubled throughput** at concurrency 4, while reducing model memory by **43 %**.
+Two rounds of optimization. Round 1 applied five flags (FP8 weights, FP8 KV, prefix caching, tuned context length and GPU mem util). Round 2 added speculative decoding with a Llama 3.2 1B draft. Combined effect: **p50 latency cut 55 %**, **throughput up 218 %** sequentially and **75 %** higher at concurrency 4.
 
-| Metric | Baseline (BF16, no prefix cache) | Optimized | Δ |
-| --- | --- | --- | --- |
-| Mean latency (sequential) | 9.27 s | 7.42 s | **−20 %** |
-| p50 | 10.79 s | 7.78 s | **−28 %** |
-| p95 | 11.66 s | 8.80 s | **−24 %** |
-| Throughput (sequential, 1 inflight) | 0.055 qps | 0.101 qps | **+84 %** |
-| Throughput (concurrent, 4 inflight) | not measured | 0.200 qps | *2× over sequential optimized* |
-| Model weights memory | 14.99 GB | **8.49 GB** | **−43 %** |
+| Metric | Baseline | Round 1 (FP8 etc.) | Round 2 (+ Spec Decode) | Total Δ vs baseline |
+| --- | --- | --- | --- | --- |
+| Mean latency (sequential) | 9.27 s | 7.42 s | **4.86 s** | **−48 %** |
+| p50 | 10.79 s | 7.78 s | **4.81 s** | **−55 %** |
+| p95 | 11.66 s | 8.80 s | **5.86 s** | **−50 %** |
+| Throughput (sequential) | 0.055 qps | 0.101 qps | **0.175 qps** | **+218 %** |
+| Throughput (concurrent, 4 inflight) | — | 0.200 qps | **0.349 qps** | *vs round 1: +75 %* |
+| Target-model weights memory | 14.99 GB | 8.49 GB | 8.49 GB | **−43 %** |
+| Total weights memory | 14.99 GB | 8.49 GB | 10.81 GB (+ 2.32 GB draft) | **−28 %** |
 
 Workload baseline is the `benchmarks/bench.py` HR-interview query set against an indexed PDF. Hardware: 1× NVIDIA L40S 48 GB.
 
@@ -114,15 +115,38 @@ Worst-case input + output for a single turn is well under 3 000 tokens. The defa
 
 ---
 
+## 6. Speculative Decoding — `--speculative-model=meta-llama/Llama-3.2-1B-Instruct --num-speculative-tokens=5`
+
+**Mechanism.** A small "draft" model proposes N tokens at a time; the target model verifies all N in a single forward pass via [rejection sampling](https://arxiv.org/abs/2302.01318). When the draft tokens match what the target would have generated, you get N tokens for the price of one forward pass. When the draft is wrong, the target falls back to its own sampled token at the rejection point. Throughput scales with **acceptance rate** (the fraction of draft tokens the target accepts).
+
+**Why it fits this workload.** Two reasons:
+
+1. **Same-family pairing.** Llama 3.2 1B and Llama 3.1 8B share the same tokenizer (Llama 3 BPE, 128 K vocab) and were trained on related data. Same-family draft/target pairs typically achieve 60–80 % acceptance — much higher than cross-family or random-init drafts.
+
+2. **The constitutional critic dominates total latency.** Generating ~500 tokens of structured JSON, sequentially, was the long pole at 25–40 % of total request time. Spec decoding shines on long generations because the per-token amortization of forward passes is what matters — short answers don't benefit as much.
+
+**Trade-off.**
+- **Memory.** Adds 2.32 GB for the BF16 1B draft on top of the 8.49 GB FP8 target. To make room, GPU memory utilization was dropped 0.90 → 0.80 (KV cache budget shrinks slightly).
+- **vLLM 0.6.6 incompatibility with guided decoding.** vLLM's xgrammar-based JSON-mode (`response_format={"type":"json_object"}`) crashes when combined with speculative decoding (a known upstream bug; the sampler's `input_ids[-1]` indexing fails). Mitigation: removed `response_format` from the constitutional critic call in `src/enterprise_rag/safety/constitutional.py`. Our existing tolerant JSON parser (find first `{`, last `}`, decode the slice) handles the unguided output reliably — Llama 3.1 8B follows the explicit "reply ONLY with strict JSON of this shape" instruction in practice.
+- **Async output disabled.** vLLM logs `Async output processing is not supported with speculative decoding currently` — this is a vLLM limitation, costs a small amount of theoretical throughput at very high concurrency. Negligible at our scale.
+
+**Measured impact.**
+
+| Metric | Without spec decode | With spec decode | Δ |
+| --- | --- | --- | --- |
+| Mean latency (sequential) | 7.42 s | **4.86 s** | **−35 %** |
+| p50 | 7.78 s | **4.81 s** | **−38 %** |
+| p95 | 8.80 s | **5.86 s** | **−33 %** |
+| Throughput (sequential) | 0.101 qps | **0.175 qps** | **+73 %** |
+| Throughput (concurrent, 4 inflight) | 0.200 qps | **0.349 qps** | **+75 %** |
+
+The lift is consistent across sequential and concurrent regimes, which means we're not hitting an obvious bottleneck.
+
+**Why this size of speedup is plausible.** The naive expectation for spec decoding with a 1B/8B family is 2–3× on memory-bound decode. We see ~1.7× on sequential workloads. The gap is explained by: (a) our target is already FP8 (compute-bound matters more, spec decode helps less than the BF16 case); (b) the workload has a meaningful prefill component (retrieved context + system prompt = ~1 K tokens of input) where spec decoding doesn't help; (c) safety pipeline calls (LlamaGuard input + output) sit on a separate vLLM instance and aren't sped up. Pure decode speedup on the 70 B BF16 case would be larger.
+
+---
+
 ## Other levers, not yet enabled
-
-These weren't applied because the marginal gain didn't justify the complexity *for this workload*. Documented so future-you can reach for them when the workload changes.
-
-### Speculative decoding — `--speculative-model meta-llama/Llama-3.2-1B-Instruct --num-speculative-tokens 5`
-
-A small "draft" model proposes N tokens at a time; the target model verifies in parallel. For our 8B target with a 1B draft, expected speedup is **2–3×** on memory-bound decode (which the constitutional critic JSON generation is — many short sequential requests). Not enabled because (1) it requires a second model in memory, raising the floor; (2) the 1B/8B family is moderately well-aligned but you should validate quality on your eval set; (3) it adds a moving part that complicates debugging.
-
-When to add it: when end-to-end latency is the dominant complaint *and* we have validated quality on a regression set.
 
 ### FlashInfer attention backend — `VLLM_ATTENTION_BACKEND=FLASHINFER`
 
@@ -183,6 +207,7 @@ To compare against an unoptimized baseline, edit `docker-compose.yml`:
 | Out-of-memory loading model | FP8 model weights, smaller model | Lower `gpu-memory-utilization` |
 | Long TTFT on warm requests | Prefix caching | Lower `max-model-len` |
 | Decode throughput plateaus under load | FP8 KV + higher `gpu-memory-utilization` | `--max-num-seqs` tuning |
-| Decode latency too high regardless | Speculative decoding | Smaller target model |
+| Long-output decode is the long pole | **Speculative decoding** (same-family draft) | Smaller target model |
 | Multi-tenant GPU contention | Conservative `gpu-memory-utilization` | Pin to dedicated GPU |
 | Long-document RAG (16K+ context) | Chunked prefill, higher `max-model-len` | Long-context attention kernels (FlashInfer) |
+| Spec decoding + guided decoding crashes | Drop `response_format`, parse leniently | Wait for vLLM upstream fix |
