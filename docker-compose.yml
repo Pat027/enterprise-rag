@@ -13,15 +13,88 @@ services:
       timeout: 3s
       retries: 20
 
+  # Generation + constitutional critic — Llama 3.1 70B FP8 on 2× L40S (TP=2)
+  vllm-gen:
+    image: vllm/vllm-openai:v0.6.6
+    container_name: enterprise-rag-vllm-gen
+    command:
+      - --model=neuralmagic/Meta-Llama-3.1-70B-Instruct-FP8-dynamic
+      - --tensor-parallel-size=2
+      - --max-model-len=8192
+      - --gpu-memory-utilization=0.92
+      - --port=8000
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+    volumes:
+      - ./hf_cache:/root/.cache/huggingface
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0", "2"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
+
+  # LlamaGuard 3 8B on 1× L40S
+  vllm-guard:
+    image: vllm/vllm-openai:v0.6.6
+    container_name: enterprise-rag-vllm-guard
+    command:
+      - --model=meta-llama/Llama-Guard-3-8B
+      - --max-model-len=4096
+      - --gpu-memory-utilization=0.85
+      - --port=8000
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+    volumes:
+      - ./hf_cache:/root/.cache/huggingface
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["3"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+
   api:
     build: .
     container_name: enterprise-rag-api
     depends_on:
       qdrant:
         condition: service_healthy
+      vllm-gen:
+        condition: service_healthy
+      vllm-guard:
+        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
       - QDRANT_URL=http://qdrant:6333
+      - VLLM_GEN_URL=http://vllm-gen:8000/v1
+      - VLLM_GUARD_URL=http://vllm-guard:8000/v1
     env_file:
       - .env
+    # Embeddings + reranker run inside the API container — claim GPU 1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
