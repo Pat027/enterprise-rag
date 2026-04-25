@@ -160,11 +160,44 @@ In practice: ship `direct` as the default, A/B against `multi_query` and `hyde` 
 
 ## Comparative RAGAS evaluation on this repo's corpus
 
-Run `python evals/runner.py --label <strategy>` after setting `RAG_STRATEGY=<strategy>` in `.env` and recreating the API container. Latest results (HR-interview Q&A gold set, 14 questions, judged by local Llama 3.1 8B FP8):
+Same gold set (HR behavioral-interview Q&A, 14 questions), same judge (local Llama 3.1 8B FP8 + BGE-M3 embeddings), same retrieval mode (`hybrid` = BM25 + dense + RRF). Only `RAG_STRATEGY` varies. Higher `answer_relevancy` is better.
 
-> The full numbers will be filled in by the eval runs. Until then, see `evals/results/`. The `direct` baseline lives at `evals/results/20260425T172044-baseline.json` (answer_relevancy ≈ 0.79).
+| Strategy | answer_relevancy mean | n (non-empty answers) | Δ vs direct | Notes |
+|---|---:|---:|---:|---|
+| **`step_back`** | **0.8194** | 9 | **+0.037** | Best — abstract context helps on behavioral questions where principles + specifics both matter |
+| `direct` | 0.7825 | 7 | — | Baseline naive RAG. Highest precision per answer, lowest recall (only 7/14 produced an answer) |
+| `hyde` | 0.7812 | 9 | −0.001 | Tied on relevance, but better recall (9/14 vs 7) — hypothetical answer broadens what's retrievable |
+| `multi_query` | 0.7311 | 9 | −0.051 | Variants dilute precision on this small corpus — RAG-Fusion shines on bigger corpora with vocabulary mismatch |
 
-Once we have all four strategies measured the table will live here as the headline output of this doc.
+Result files in `evals/results/`:
+- `20260425T175904-direct.json`
+- `20260425T180104-hyde.json`
+- `20260425T180348-multi_query.json`
+- `20260425T180619-step_back.json`
+
+**What this tells us about the workload:**
+
+1. **Step-back's win is workload-specific, not universal.** Behavioral interview questions ("how should I answer X?") benefit from retrieving both the general principle (the abstract step-back) and the specific tactic. On purely factual lookups ("what year was X published?") step-back would likely add noise.
+
+2. **Multi-query lost on this corpus.** The HR PDF has tight vocabulary; LLM-generated variants pull in passages that share words but not intent, dragging down `answer_relevancy`. This matches the literature — multi-query/RAG-Fusion shines on large heterogeneous corpora.
+
+3. **HyDE bought recall, not precision.** 9/14 vs 7/14 successful answers. Same per-answer relevance as direct. On a corpus where the dense embeddings already match well, HyDE's hypothetical-answer step doesn't bridge a gap that needs bridging.
+
+4. **The right move on this workload:** ship `step_back` as default for question-answering corpora; keep `direct` as fallback for systems where the +1 LLM call cost matters; only use `multi_query` if you've measured a recall problem on a bigger corpus.
+
+5. **The eval has limits.** `answer_relevancy` is the only RAGAS metric we compute (the API doesn't expose retrieved passage text, so context-based metrics are skipped). With contexts wired through, `context_recall` would directly show why `step_back` retrieves better — that's a planned follow-up.
+
+To reproduce:
+```bash
+for strategy in direct hyde multi_query step_back; do
+  sed -i "s|^RAG_STRATEGY=.*|RAG_STRATEGY=$strategy|" .env
+  docker compose up -d --force-recreate api
+  sleep 10
+  python evals/runner.py --label "$strategy" \
+    --judge-url "http://$(docker inspect enterprise-rag-vllm-gen -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):8000/v1" \
+    --output "evals/results/$(date +%Y%m%dT%H%M%S)-$strategy.json"
+done
+```
 
 ## Implementation pattern (for future strategies)
 

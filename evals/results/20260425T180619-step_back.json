@@ -1,0 +1,713 @@
+{
+  "label": "step_back",
+  "timestamp_utc": "2026-04-25T18:07:53.579403+00:00",
+  "settings": {
+    "api_url": "http://localhost:8088/query",
+    "judge_url": "http://172.31.0.5:8000/v1",
+    "judge_model": "neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
+    "embed_model": "BAAI/bge-m3",
+    "retrieval_mode": "default (api defaults)"
+  },
+  "gold_set_size": 14,
+  "rows": [
+    {
+      "question": "What is the STAR method?",
+      "ground_truth": "STAR is a framework for answering behavioral interview questions by structuring a response around four parts: Situation (the context), Task (the goal or challenge), Action (what you specifically did), and Result (the outcome, ideally quantified).",
+      "answer": "The STAR method is not explicitly mentioned in the provided context as a definition, but it is mentioned as a guideline for answering behavioral interview questions [1]. \n\nHowever, based on the context, the STAR method is implied to be a framework for structuring answers to behavioral questions, where:\n\n- S: Situation (context or background)\n- T: Task (the specific challenge or goal)\n- A: Action (the steps taken to address the challenge or goal)\n- R: Result (the outcome or impact of the actions taken)\n\nThis framework is suggested as a way to structure answers to behavioral interview questions, with the goal of keeping verbal answers to 60-90 seconds [1].",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A"
+          ],
+          "rerank_score": 0.5186676383018494
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.00011735877342289314
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. What are your biggest strengths?"
+          ],
+          "rerank_score": 7.583573460578918e-05
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. How do you work with cross-functional teams?"
+          ],
+          "rerank_score": 5.496826270245947e-05
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q4. Tell me about a difficult stakeholder."
+          ],
+          "rerank_score": 5.2155894081806764e-05
+        }
+      ],
+      "latency_s": 30.174,
+      "error": null
+    },
+    {
+      "question": "How should I answer 'tell me about yourself'?",
+      "ground_truth": "Give a concise 1-2 minute pitch that covers your present role and key responsibilities, a brief past trajectory showing relevant experience, and your future goals tied to why you are interested in this role. Stay professional and focus on career-relevant facts rather than personal details.",
+      "answer": "To answer \"Tell me about yourself\" in a 60-90 second response, structure your answer in three parts:\n\n(1) A one-line summary of who you are professionally - your role, years of experience, and core strengths [1]. For example, \"I'm a software engineer with 5 years of experience, specializing in cloud architecture and team leadership.\"\n\n(2) A brief arc of how you got here - one or two highlights that shaped your trajectory, not a full resume read-through [2]. This is where you tell the story behind your CV, focusing on the experiences that made you who you are today. For example, \"I started my career in a small startup, where I learned to be adaptable and innovative. Later, I joined a larger company, where I developed my leadership skills and learned to scale my work.\"\n\n(3) Why you're in this conversation today - what you're looking for next and why this role fits [1]. This is where you show your enthusiasm for the role and the company, and explain how your skills and experience align with the position. For example, \"I'm excited about this role because it combines my technical expertise with my leadership experience, and I believe I can make a significant impact here. I'm looking for a new challenge where I can grow and contribute to a dynamic team.\"\n\nEnd with a hand-off like \"Happy to go deeper into any of that.\"",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.07976974546909332
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.005868803709745407
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A"
+          ],
+          "rerank_score": 0.004056770354509354
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. How do you handle learning a new technology or domain quickly?"
+          ],
+          "rerank_score": 0.0027063745073974133
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. Tell me about a time you had to deal with ambiguity."
+          ],
+          "rerank_score": 0.002308984287083149
+        }
+      ],
+      "latency_s": 5.594,
+      "error": null
+    },
+    {
+      "question": "What are common mistakes candidates make in interviews?",
+      "ground_truth": "Common mistakes include: showing up unprepared or not researching the company, badmouthing previous employers, rambling without structure, failing to ask thoughtful questions, being dishonest about skills, poor body language, and not following up after the interview.",
+      "answer": "",
+      "refusal": "The model's response was withheld by the safety layer (constitutional): honest_uncertainty: The response does not surface conflicts or ambiguities in the context, but rather presents a single perspective as fact.",
+      "blocked_by": "constitutional",
+      "citations": [],
+      "latency_s": 6.719,
+      "error": null
+    },
+    {
+      "question": "Should I criticize my current employer when explaining why I'm leaving?",
+      "ground_truth": "No. Avoid speaking negatively about your current or previous employer. Frame the move positively in terms of what you are seeking next - growth opportunities, new challenges, alignment with the new role - rather than what is wrong with where you are now.",
+      "answer": "No, you should not criticize your current employer when explaining why you're leaving [1]. Instead, frame the move as a pull toward the new role, not a push from the old one. This approach helps to maintain a positive tone and avoids negative impressions.",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. Why are you looking to leave your current role?"
+          ],
+          "rerank_score": 0.9695423245429993
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.0007589990855194628
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.0004433528520166874
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. Tell me about a time you disagreed with your manager."
+          ],
+          "rerank_score": 0.00017613360250834376
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. What is your biggest weakness?"
+          ],
+          "rerank_score": 0.00016079323540907353
+        }
+      ],
+      "latency_s": 3.165,
+      "error": null
+    },
+    {
+      "question": "What questions should I ask the interviewer at the end?",
+      "ground_truth": "Ask thoughtful questions about the role, team, and company. Examples: What does success look like in this role in the first 6-12 months? How is the team structured? What are the biggest challenges facing the team? What is the culture like? What are the next steps in the process? Avoid asking about salary or benefits in early rounds.",
+      "answer": "",
+      "refusal": "The model's response was withheld by the safety layer (constitutional): factual_grounding: The response does not directly reference the retrieved context, but rather provides general advice on what to ask in an interview. It does not acknowledge the context's focus on behavioral interview questions and answers.; honest_uncertainty: The response does not acknowledge any potential conflicts or ambiguities in the context, and instead provides a straightforward list of questions to ask in an interview.",
+      "blocked_by": "constitutional",
+      "citations": [],
+      "latency_s": 7.07,
+      "error": null
+    },
+    {
+      "question": "How should I describe my biggest strengths?",
+      "ground_truth": "Pick 2-3 strengths that are relevant to the role, and back each up with a concrete example or short STAR-style story showing how that strength produced a result. Focus on skills the job description emphasizes.",
+      "answer": "Three of your biggest strengths come up repeatedly. You take end-to-end ownership, taking systems from proof of concept through production. You have a production reliability mindset, building in observability, evaluation, and guardrails early. And you have breadth across classical ML and modern AI, which lets you match the right approach to the problem rather than forcing one stack [2].",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.045298416167497635
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. What are your biggest strengths?"
+          ],
+          "rerank_score": 0.02704557217657566
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. What kind of environment do you do your best work in?"
+          ],
+          "rerank_score": 0.004002134781330824
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. How would your colleagues describe you?"
+          ],
+          "rerank_score": 0.003933473024517298
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q5. Tell me about a time you had to balance competing priorities."
+          ],
+          "rerank_score": 0.0022467919625341892
+        }
+      ],
+      "latency_s": 3.715,
+      "error": null
+    },
+    {
+      "question": "How do you handle a question about your weaknesses?",
+      "ground_truth": "Pick a real but non-disqualifying weakness, explain it honestly, and describe the concrete steps you are taking to improve. Avoid cliches like 'I am a perfectionist' and avoid weaknesses that are core to the job.",
+      "answer": "To answer a question about your weaknesses, you can follow these steps:\n\nPick a real weakness that doesn't torpedo the role [1]. This means choosing a weakness that is not essential to the job, but also not a major liability. For example, if you're applying for a data analyst role, saying you're weak in data analysis would be a problem.\n\nShow self-awareness and the correction. Explain how you're actively working on improving this weakness. For instance, you could say something like:\n\n\"I've noticed that I sometimes tend to be a perfectionist, which can lead to overthinking and analysis paralysis. However, I've been working on prioritizing tasks and setting deadlines for myself to ensure I meet project milestones. I've also been seeking feedback from colleagues and mentors to help me identify areas where I can improve my time management skills.\"\n\nThis approach shows that you're aware of your weakness, but also proactive in addressing it. It also highlights your ability to learn and grow, which is an attractive quality to employers.\n\nHere's an example answer:\n\n\"I've identified that I sometimes struggle with delegating tasks to team members, which can lead to overloading myself and impacting project timelines. However, I've been working on trusting my team members and delegating tasks more effectively. I've also been seeking feedback from my manager and colleagues to help me improve my leadership skills and ensure that I'm empowering my team to succeed. I'm committed to continuing to work on this area and becoming a more effective leader.\"",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. What is your biggest weakness?"
+          ],
+          "rerank_score": 0.03371327742934227
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.005334686953574419
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. How do you handle feedback or criticism?"
+          ],
+          "rerank_score": 0.0009291176102124155
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.0006736227078363299
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A"
+          ],
+          "rerank_score": 0.0005445590941235423
+        }
+      ],
+      "latency_s": 7.386,
+      "error": null
+    },
+    {
+      "question": "How should I answer 'why do you want to work here'?",
+      "ground_truth": "Tie your answer to specific things about the company - its mission, products, culture, or recent work - and connect those to your skills and career goals. Show that you have done research and that the fit is two-way.",
+      "answer": "",
+      "refusal": "The model's response was withheld by the safety layer (constitutional): factual_grounding: The response fabricates information not present in the context, specifically the company's focus on [2].; honest_uncertainty: The response does not surface any conflicts or ambiguities in the context, instead presenting a single, unified answer.",
+      "blocked_by": "constitutional",
+      "citations": [],
+      "latency_s": 3.912,
+      "error": null
+    },
+    {
+      "question": "How do you describe a time you dealt with a difficult stakeholder?",
+      "ground_truth": "Use the STAR method: describe the situation and who the stakeholder was, the task or conflict, the actions you took (active listening, clarifying expectations, finding common ground, escalating appropriately), and the result. Emphasize professionalism and outcome over blame.",
+      "answer": "A senior stakeholder was sceptical of a model I'd proposed and kept raising edge cases in meetings. Instead of defending in real time, I asked for 30 minutes one-on-one. It turned out their concern wasn't the model - it was a past project that had failed under similar framing. Once I understood the history, I adapted the rollout plan to include a staged pilot and clearer kill criteria. They became one of the strongest advocates for the work [1].",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q4. Tell me about a difficult stakeholder."
+          ],
+          "rerank_score": 0.005583993624895811
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q5. Describe a time you had to persuade someone."
+          ],
+          "rerank_score": 0.001240754616446793
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.0008100835839286447
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. Tell me about a time you had to deal with ambiguity."
+          ],
+          "rerank_score": 0.0008042759145610034
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q4. How do you handle pressure and tight deadlines?"
+          ],
+          "rerank_score": 0.0005990226636640728
+        }
+      ],
+      "latency_s": 3.511,
+      "error": null
+    },
+    {
+      "question": "What motivates you at work?",
+      "ground_truth": "Talk about intrinsic motivators relevant to the role - solving hard problems, learning, ownership, impact on customers, working with strong teammates - and back them up with a brief example. Avoid purely extrinsic answers like money.",
+      "answer": "Shipping things that actually get used and measurably improve outcomes [1]. The moment a user or a domain expert tells me they've saved hours, caught something they'd otherwise have missed, or trusted a system to make a decision - that's what keeps me invested.",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. What motivates you?"
+          ],
+          "rerank_score": 0.01638433337211609
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q4. What does work-life balance mean to you?"
+          ],
+          "rerank_score": 0.0052486564964056015
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. What kind of environment do you do your best work in?"
+          ],
+          "rerank_score": 0.002842927584424615
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. Why are you interested in this role / company?"
+          ],
+          "rerank_score": 0.0022315692622214556
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q5. Tell me about a time you had to balance competing priorities."
+          ],
+          "rerank_score": 0.0013326754560694098
+        }
+      ],
+      "latency_s": 2.754,
+      "error": null
+    },
+    {
+      "question": "How do you work with cross-functional teams?",
+      "ground_truth": "Emphasize clear communication, aligning on shared goals, understanding each function's constraints, regular sync-ups, and using shared documentation. Give a brief example of a cross-functional project where you delivered an outcome.",
+      "answer": "I treat product managers, engineers, and domain experts as co-owners of the problem, not stakeholders I deliver to [2]. In practice that means over-communicating through written design docs and short weekly demos, inviting feedback before I'm committed to an approach, and making sure domain experts help define what success looks like. Data scientists work best when the problem is shaped jointly - not when it's handed over [2].",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. What kind of environment do you do your best work in?"
+          ],
+          "rerank_score": 0.002626157598569989
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. How do you work with cross-functional teams?"
+          ],
+          "rerank_score": 0.0009869170607998967
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q4. Tell me about a time you took initiative."
+          ],
+          "rerank_score": 0.0008251737453974783
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. Describe a time you made a mistake. How did you handle it?"
+          ],
+          "rerank_score": 0.0004800306633114815
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. Why are you interested in this role / company?"
+          ],
+          "rerank_score": 0.0003894339897669852
+        }
+      ],
+      "latency_s": 3.376,
+      "error": null
+    },
+    {
+      "question": "How should I follow up after an interview?",
+      "ground_truth": "Send a short, personalized thank-you email within 24 hours to each interviewer. Reference something specific from the conversation, reaffirm your interest, and offer to provide any additional information. If you have not heard back by the timeline they gave, send a polite check-in.",
+      "answer": "After an interview, it's essential to follow up to express gratitude and reiterate interest in the role. Here's a suggested approach:\n\n1. Send a thank-you note or email within 24 hours of the interview [5]. This can be a brief message, such as: \"Dear [Interviewer's Name], I wanted to thank you for taking the time to speak with me today about the [Role] position. I appreciated learning more about the team and the company's goals. Please let me know if there's any additional information I can provide to support my application.\"\n\n2. If you haven't heard back within a week or two, consider a follow-up email to inquire about the status of your application. This can be a polite and non-intrusive message, such as: \"Hi [Interviewer's Name], I'm following up on our conversation from [Interview Date] regarding the [Role] position. I'm still very interested in the opportunity and would appreciate any update on the current status of my application.\"\n\n3. If you're asked to come in for a second round of interviews or receive an offer, be sure to respond promptly and professionally. This may involve scheduling a follow-up meeting, accepting the offer, or declining it with gratitude.\n\nRemember to keep your follow-up communications brief, polite, and professional, and always use the STAR method to structure your responses when relevant.",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.04891914874315262
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q1. Tell me about yourself."
+          ],
+          "rerank_score": 0.005010491237044334
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. How do you handle feedback or criticism?"
+          ],
+          "rerank_score": 0.002504656556993723
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. Why are you looking to leave your current role?"
+          ],
+          "rerank_score": 0.002135311486199498
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A"
+          ],
+          "rerank_score": 0.0020117172971367836
+        }
+      ],
+      "latency_s": 6.137,
+      "error": null
+    },
+    {
+      "question": "How do you handle conflict with a coworker?",
+      "ground_truth": "Address it directly and privately, listen to understand the other side, focus on the issue not the person, look for common goals, and escalate to a manager only if needed. Use a STAR example showing a positive resolution.",
+      "answer": "",
+      "refusal": "The model's response was withheld by the safety layer (constitutional): honest_uncertainty: The response does not surface any conflicts or ambiguities in the context",
+      "blocked_by": "constitutional",
+      "citations": [],
+      "latency_s": 4.052,
+      "error": null
+    },
+    {
+      "question": "What should I do if I do not know the answer to a technical question?",
+      "ground_truth": "Be honest that you do not know, but show your thought process: state assumptions, talk through how you would find the answer, draw analogies from related areas, and ask clarifying questions. Interviewers value reasoning and honesty over bluffing.",
+      "answer": "If you don't know the answer to a technical question, I'd recommend the approach described in [2] for learning a new technology or domain quickly. However, since you're dealing with a specific question, not a new domain, you can adapt this approach. \n\nFirst, ask clarifying questions to understand the context and scope of the question. This will help you determine the best course of action. If you still can't answer the question, you can say something like, \"I'm not familiar with this specific topic, but I can try to find the answer or point you in the direction of someone who might be able to help.\"\n\nIf you're in a situation where you need to answer the question on the spot, you can say, \"That's a great question, and I'm not sure of the answer off the top of my head. Can I take a moment to look it up or discuss it with my team?\" This shows that you're proactive and willing to find the answer, even if you don't have it immediately.\n\nUltimately, not knowing the answer to a technical question is not a failure. It's an opportunity to learn and grow, and being honest and transparent about your limitations is a valuable skill in any technical field.",
+      "refusal": null,
+      "blocked_by": null,
+      "citations": [
+        {
+          "index": 1,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. How do you handle feedback or criticism?"
+          ],
+          "rerank_score": 0.026636552065610886
+        },
+        {
+          "index": 2,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q2. How do you handle learning a new technology or domain quickly?"
+          ],
+          "rerank_score": 0.003310592146590352
+        },
+        {
+          "index": 3,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q4. Tell me about a time you received tough feedback."
+          ],
+          "rerank_score": 0.0028078157920390368
+        },
+        {
+          "index": 4,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q3. Tell me about a time you had to deal with ambiguity."
+          ],
+          "rerank_score": 0.0013526567490771413
+        },
+        {
+          "index": 5,
+          "source": "HR_Behavioral_Interview_QA.pdf",
+          "page": null,
+          "section_path": [
+            "HR Behavioral Interview Q&A",
+            "Q5. Describe a time you had to persuade someone."
+          ],
+          "rerank_score": 0.0008664312190376222
+        }
+      ],
+      "latency_s": 6.698,
+      "error": null
+    }
+  ],
+  "metrics_skipped": {
+    "faithfulness": "API /query response does not include retrieved passage text; only citation metadata. Re-running retrieval here would duplicate the pipeline.",
+    "context_precision": "API /query response does not include retrieved passage text; only citation metadata. Re-running retrieval here would duplicate the pipeline.",
+    "context_recall": "API /query response does not include retrieved passage text; only citation metadata. Re-running retrieval here would duplicate the pipeline."
+  },
+  "aggregate": {
+    "answer_relevancy_mean": 0.8194,
+    "answer_relevancy_n": 9,
+    "answer_relevancy_nan_count": 1
+  },
+  "per_question": [
+    {
+      "question": "What is the STAR method?",
+      "answer_relevancy": 1.0
+    },
+    {
+      "question": "How should I answer 'tell me about yourself'?",
+      "answer_relevancy": 0.8334
+    },
+    {
+      "question": "Should I criticize my current employer when explaining why I'm leaving?",
+      "answer_relevancy": 0.9437
+    },
+    {
+      "question": "How should I describe my biggest strengths?",
+      "answer_relevancy": 0.8402
+    },
+    {
+      "question": "How do you handle a question about your weaknesses?",
+      "answer_relevancy": 0.9137
+    },
+    {
+      "question": "How do you describe a time you dealt with a difficult stakeholder?",
+      "answer_relevancy": 0.5152
+    },
+    {
+      "question": "What motivates you at work?",
+      "answer_relevancy": 0.7906
+    },
+    {
+      "question": "How do you work with cross-functional teams?",
+      "answer_relevancy": 0.6241
+    },
+    {
+      "question": "How should I follow up after an interview?",
+      "answer_relevancy": 0.9139
+    },
+    {
+      "question": "What should I do if I do not know the answer to a technical question?",
+      "answer_relevancy": null
+    }
+  ],
+  "wall_time_s": 129.4
+}
