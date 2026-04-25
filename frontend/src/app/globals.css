@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.18 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.46 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0 0);
+  --border: oklch(0.92 0 0);
+  --input: oklch(0.92 0 0);
+  --ring: oklch(0.65 0.13 178);
+  /* Restrained accent: muted teal */
+  --accent: oklch(0.55 0.10 178);
+  --accent-foreground: oklch(0.99 0 0);
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: oklch(0.14 0 0);
+  --foreground: oklch(0.96 0 0);
+  --muted: oklch(0.20 0 0);
+  --muted-foreground: oklch(0.66 0 0);
+  --card: oklch(0.17 0 0);
+  --card-foreground: oklch(0.96 0 0);
+  --border: oklch(0.27 0 0);
+  --input: oklch(0.27 0 0);
+  --ring: oklch(0.70 0.13 178);
+  --accent: oklch(0.70 0.10 178);
+  --accent-foreground: oklch(0.14 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Citation badge highlight pulse */
+@keyframes citationFlash {
+  0% { background-color: var(--accent); color: var(--accent-foreground); }
+  100% { background-color: transparent; color: inherit; }
+}
+.citation-flash {
+  animation: citationFlash 1.4s ease-out;
+}
