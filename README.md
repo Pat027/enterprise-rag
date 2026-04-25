@@ -182,6 +182,12 @@ for when to reach for each lever.
 There is also a small benchmark script at [`benchmarks/bench.py`](./benchmarks/bench.py)
 to reproduce these numbers against your own deployment.
 
+**Observability**: OpenTelemetry traces + Prometheus metrics + provisioned
+Grafana dashboards. See [`deploy/observability/README.md`](./deploy/observability/README.md)
+for setup. We optimized vLLM (above); now we can OBSERVE it at runtime — KV
+cache usage, TTFT distributions, generation throughput, and per-stage RAG
+latency are all on the dashboards out of the box.
+
 ## Roadmap
 
 - [ ] Frontend (Next.js + shadcn/ui)
