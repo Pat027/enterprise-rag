@@ -1,16 +1,21 @@
-"""FastAPI application — /ingest, /query, /health."""
+"""FastAPI application — /ingest, /query, /query/stream, /health."""
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from .. import __version__, graph, ingestion, retrieval
+from .auth import warn_if_auth_disabled
+from .ratelimit import rate_limit
 from .schemas import (
     Citation,
     HealthResponse,
@@ -36,13 +41,21 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def _startup() -> None:
+    warn_if_auth_disabled()
+
+
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok", package_version=__version__)
 
 
 @app.post("/ingest", response_model=IngestResponse)
-async def ingest(file: UploadFile = File(...)) -> IngestResponse:
+async def ingest(
+    file: UploadFile = File(...),  # noqa: B008 — FastAPI idiom
+    caller_id: str = Depends(rate_limit),  # noqa: B008 — FastAPI idiom
+) -> IngestResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="missing filename")
 
@@ -52,23 +65,27 @@ async def ingest(file: UploadFile = File(...)) -> IngestResponse:
         tmp_path = Path(tmp.name)
 
     try:
-        log.info("ingest_start", source=file.filename)
+        log.info("ingest_start", source=file.filename, caller=caller_id)
         chunks = ingestion.parse_document(tmp_path)
         # Preserve original filename in chunks (parser used the temp path)
         for c in chunks:
             c.source = file.filename
         count = retrieval.upsert_chunks(chunks)
-        log.info("ingest_done", source=file.filename, chunks=count)
+        log.info("ingest_done", source=file.filename, chunks=count, caller=caller_id)
         return IngestResponse(source=file.filename, chunks_indexed=count)
     finally:
         tmp_path.unlink(missing_ok=True)
 
 
 @app.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest) -> QueryResponse:
+def query(
+    req: QueryRequest,
+    caller_id: str = Depends(rate_limit),
+) -> QueryResponse:
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="empty query")
 
+    log.info("query_start", caller=caller_id)
     result = graph.run_query(req.query)
     blocking = result.get("blocking_verdict")
 
@@ -88,4 +105,34 @@ def query(req: QueryRequest) -> QueryResponse:
         refusal=result.get("refusal"),
         citations=citations if not blocking else [],
         blocked_by=blocking.layer if blocking else None,
+    )
+
+
+async def _sse_event_stream(query_text: str) -> AsyncIterator[bytes]:
+    """Adapt run_query_stream() event dicts to SSE wire format."""
+    async for event in graph.run_query_stream(query_text):
+        payload = json.dumps(event, ensure_ascii=False)
+        yield f"data: {payload}\n\n".encode()
+
+
+@app.post("/query/stream")
+async def query_stream(
+    req: QueryRequest,
+    caller_id: str = Depends(rate_limit),
+) -> StreamingResponse:
+    """Stream the RAG pipeline as Server-Sent Events.
+
+    Each event is a JSON object: see ``graph.streaming`` for shapes.
+    """
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="empty query")
+
+    log.info("query_stream_start", caller=caller_id)
+    return StreamingResponse(
+        _sse_event_stream(req.query),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx buffering
+        },
     )
