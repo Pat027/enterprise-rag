@@ -1,0 +1,94 @@
+{
+  "title": "vLLM Inference",
+  "uid": "vllm-inference",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["vllm", "rag"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": "label_values(vllm:num_requests_running, job)",
+        "includeAll": true,
+        "multi": true,
+        "current": {"selected": true, "text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "GPU KV cache usage",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "targets": [
+        {"expr": "vllm:gpu_cache_usage_perc{job=~\"$instance\"}", "legendFormat": "{{job}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Running requests",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "vllm:num_requests_running{job=~\"$instance\"}", "legendFormat": "running {{job}}", "refId": "A"},
+        {"expr": "vllm:num_requests_waiting{job=~\"$instance\"}", "legendFormat": "waiting {{job}}", "refId": "B"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Generation throughput (tokens/sec)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [
+        {"expr": "rate(vllm:generation_tokens_total{job=~\"$instance\"}[1m])", "legendFormat": "gen {{job}}", "refId": "A"},
+        {"expr": "rate(vllm:prompt_tokens_total{job=~\"$instance\"}[1m])", "legendFormat": "prompt {{job}}", "refId": "B"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Time to first token (p50/p95/p99)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, job) (rate(vllm:time_to_first_token_seconds_bucket{job=~\"$instance\"}[5m])))", "legendFormat": "p50 {{job}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, job) (rate(vllm:time_to_first_token_seconds_bucket{job=~\"$instance\"}[5m])))", "legendFormat": "p95 {{job}}", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le, job) (rate(vllm:time_to_first_token_seconds_bucket{job=~\"$instance\"}[5m])))", "legendFormat": "p99 {{job}}", "refId": "C"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Inter-token latency p95",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, job) (rate(vllm:time_per_output_token_seconds_bucket{job=~\"$instance\"}[5m])))", "legendFormat": "p95 {{job}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Request rate (success vs failure)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "targets": [
+        {"expr": "rate(vllm:request_success_total{job=~\"$instance\"}[1m])", "legendFormat": "success {{job}}", "refId": "A"}
+      ]
+    }
+  ]
+}

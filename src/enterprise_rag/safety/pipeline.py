@@ -11,13 +11,24 @@ errors is intentional — safety layers should never bring down the whole system
 
 from __future__ import annotations
 
+import time
+from contextlib import nullcontext
+
 import structlog
 
 from ..config import get_settings
+from ..observability import RAG_CRITIC_DURATION_SECONDS, get_tracer
 from . import constitutional, llamaguard, openai_moderation
 from .types import SafetyVerdict
 
 log = structlog.get_logger()
+
+
+def _span(name: str):
+    t = get_tracer()
+    if t is None:
+        return nullcontext(None)
+    return t.start_as_current_span(name)
 
 
 def check_input(text: str) -> SafetyVerdict | None:
@@ -57,7 +68,14 @@ def check_output(query: str, context: str, response: str) -> SafetyVerdict | Non
 
     if s.safety_constitutional:
         try:
-            v = constitutional.critique(query, context, response)
+            with _span("constitutional_critic") as sp:
+                if sp is not None:
+                    sp.set_attribute("safety.layer", "constitutional")
+                t0 = time.perf_counter()
+                v = constitutional.critique(query, context, response)
+                RAG_CRITIC_DURATION_SECONDS.observe(time.perf_counter() - t0)
+                if sp is not None:
+                    sp.set_attribute("safety.allowed", v.allowed)
             if not v.allowed:
                 return v
         except Exception as e:

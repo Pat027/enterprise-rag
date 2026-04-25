@@ -1,4 +1,4 @@
-"""FastAPI application — /ingest, /query, /query/stream, /health."""
+"""FastAPI application — /ingest, /query, /query/stream, /health, /metrics."""
 
 from __future__ import annotations
 
@@ -9,11 +9,13 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import structlog
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from .. import __version__, graph, ingestion, retrieval
+from ..config import get_settings
+from ..observability import RAG_REQUEST_TOTAL, RAG_SAFETY_BLOCK_TOTAL, setup_otel
 from .auth import warn_if_auth_disabled
 from .ratelimit import rate_limit
 from .schemas import (
@@ -44,6 +46,50 @@ app.add_middleware(
 @app.on_event("startup")
 async def _startup() -> None:
     warn_if_auth_disabled()
+    s = get_settings()
+    if s.otel_enabled:
+        setup_otel(
+            service_name=s.otel_service_name,
+            otlp_endpoint=s.otel_endpoint,
+            fastapi_app=app,
+        )
+        log.info(
+            "otel_enabled",
+            service=s.otel_service_name,
+            endpoint=s.otel_endpoint,
+        )
+    else:
+        log.info("otel_disabled")
+
+    # Prometheus /metrics — register late so OTel instrumentation hooks first.
+    try:
+        from prometheus_fastapi_instrumentator import Instrumentator
+
+        Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+        log.info("prometheus_metrics_exposed", path="/metrics")
+    except Exception as exc:  # pragma: no cover
+        log.warning("prometheus_setup_failed", error=str(exc))
+
+
+@app.middleware("http")
+async def _trace_id_header(request: Request, call_next):
+    """Inject the W3C traceparent into responses so clients can correlate."""
+    response = await call_next(request)
+    try:
+        from opentelemetry import trace as _trace
+
+        span = _trace.get_current_span()
+        ctx = span.get_span_context()
+        if ctx and ctx.trace_id:
+            response.headers["X-Trace-Id"] = format(ctx.trace_id, "032x")
+            response.headers["traceparent"] = (
+                f"00-{format(ctx.trace_id, '032x')}-"
+                f"{format(ctx.span_id, '016x')}-"
+                f"{format(ctx.trace_flags, '02x')}"
+            )
+    except Exception:
+        pass
+    return response
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -57,6 +103,7 @@ async def ingest(
     caller_id: str = Depends(rate_limit),  # noqa: B008 — FastAPI idiom
 ) -> IngestResponse:
     if not file.filename:
+        RAG_REQUEST_TOTAL.labels(endpoint="ingest", status="bad_request").inc()
         raise HTTPException(status_code=400, detail="missing filename")
 
     suffix = Path(file.filename).suffix
@@ -72,6 +119,7 @@ async def ingest(
             c.source = file.filename
         count = retrieval.upsert_chunks(chunks)
         log.info("ingest_done", source=file.filename, chunks=count, caller=caller_id)
+        RAG_REQUEST_TOTAL.labels(endpoint="ingest", status="ok").inc()
         return IngestResponse(source=file.filename, chunks_indexed=count)
     finally:
         tmp_path.unlink(missing_ok=True)
@@ -83,11 +131,18 @@ def query(
     caller_id: str = Depends(rate_limit),
 ) -> QueryResponse:
     if not req.query.strip():
+        RAG_REQUEST_TOTAL.labels(endpoint="query", status="bad_request").inc()
         raise HTTPException(status_code=400, detail="empty query")
 
     log.info("query_start", caller=caller_id)
     result = graph.run_query(req.query)
     blocking = result.get("blocking_verdict")
+
+    if blocking:
+        RAG_SAFETY_BLOCK_TOTAL.labels(layer=blocking.layer).inc()
+        RAG_REQUEST_TOTAL.labels(endpoint="query", status="blocked").inc()
+    else:
+        RAG_REQUEST_TOTAL.labels(endpoint="query", status="ok").inc()
 
     citations = [
         Citation(
@@ -125,9 +180,11 @@ async def query_stream(
     Each event is a JSON object: see ``graph.streaming`` for shapes.
     """
     if not req.query.strip():
+        RAG_REQUEST_TOTAL.labels(endpoint="query_stream", status="bad_request").inc()
         raise HTTPException(status_code=400, detail="empty query")
 
     log.info("query_stream_start", caller=caller_id)
+    RAG_REQUEST_TOTAL.labels(endpoint="query_stream", status="ok").inc()
     return StreamingResponse(
         _sse_event_stream(req.query),
         media_type="text/event-stream",

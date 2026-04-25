@@ -108,6 +108,8 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - VLLM_GEN_URL=http://vllm-gen:8000/v1
       - VLLM_GUARD_URL=http://vllm-guard:8000/v1
+      - OTEL_ENABLED=true
+      - OTEL_ENDPOINT=http://otel-collector:4317
     env_file:
       - .env
     # Embeddings + reranker on dedicated GPU 2 (freed by 70B → 8B switch).
@@ -118,3 +120,67 @@ services:
             - driver: nvidia
               device_ids: ["2"]
               capabilities: [gpu]
+
+  # ── Observability stack ──────────────────────────────────────────────────
+  # OTel Collector receives OTLP from the API and fans out to Tempo (traces)
+  # and a Prometheus exporter (metrics). See deploy/observability/README.md.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    container_name: enterprise-rag-otel-collector
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus exporter
+    depends_on:
+      - tempo
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: enterprise-rag-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: enterprise-rag-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./deploy/observability/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: enterprise-rag-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./deploy/observability/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./deploy/observability/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"   # 3000 is reserved for the future frontend
+    depends_on:
+      - prometheus
+      - tempo
+
+volumes:
+  tempo_data:
+  prometheus_data:
+  grafana_data:

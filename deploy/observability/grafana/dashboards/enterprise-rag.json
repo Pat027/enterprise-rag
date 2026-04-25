@@ -1,0 +1,85 @@
+{
+  "title": "Enterprise RAG — API",
+  "uid": "enterprise-rag-api",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["enterprise-rag"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request rate by endpoint",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "targets": [
+        {"expr": "sum by (endpoint, status) (rate(rag_request_total[1m]))", "legendFormat": "{{endpoint}} {{status}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Safety blocks by layer",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [
+        {"expr": "sum by (layer) (rate(rag_safety_block_total[5m]))", "legendFormat": "{{layer}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Retrieval latency p50/p95/p99 by mode",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, mode) (rate(rag_retrieval_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{mode}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, mode) (rate(rag_retrieval_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{mode}}", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le, mode) (rate(rag_retrieval_duration_seconds_bucket[5m])))", "legendFormat": "p99 {{mode}}", "refId": "C"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Generation latency p50/p95/p99",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(rag_generation_duration_seconds_bucket[5m])))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(rag_generation_duration_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(rag_generation_duration_seconds_bucket[5m])))", "legendFormat": "p99", "refId": "C"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Constitutional critic latency",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(rag_critic_duration_seconds_bucket[5m])))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(rag_critic_duration_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "B"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "End-to-end p50/p95/p99 (FastAPI)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le, handler) (rate(http_request_duration_seconds_bucket{handler=~\"/query.*|/ingest\"}[5m])))", "legendFormat": "p50 {{handler}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket{handler=~\"/query.*|/ingest\"}[5m])))", "legendFormat": "p95 {{handler}}", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le, handler) (rate(http_request_duration_seconds_bucket{handler=~\"/query.*|/ingest\"}[5m])))", "legendFormat": "p99 {{handler}}", "refId": "C"}
+      ]
+    }
+  ]
+}

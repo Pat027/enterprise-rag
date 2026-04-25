@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     rate_limit_per_min: int = 60
     rate_limit_burst: int = 10
 
+    # ── Observability ──
+    otel_enabled: bool = False
+    otel_endpoint: str = "http://otel-collector:4317"
+    otel_service_name: str = "enterprise-rag-api"
+
     def api_keys(self) -> set[str]:
         """Parse comma-separated API keys; empty set means auth disabled."""
         return {k.strip() for k in self.api_keys_csv.split(",") if k.strip()}

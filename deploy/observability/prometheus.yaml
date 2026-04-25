@@ -1,0 +1,36 @@
+# Prometheus scrape config — three targets:
+#   1. enterprise-rag-api  — our /metrics (custom RAG counters + FastAPI)
+#   2. vllm-gen            — vLLM exposes Prometheus on its OpenAI port
+#   3. vllm-guard          — same, for the LlamaGuard 3 instance
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: enterprise-rag-api
+    static_configs:
+      - targets: ["enterprise-rag-api:8000"]
+        labels:
+          service: api
+
+  - job_name: vllm-gen
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["vllm-gen:8000"]
+        labels:
+          service: vllm
+          role: generation
+
+  - job_name: vllm-guard
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["vllm-guard:8000"]
+        labels:
+          service: vllm
+          role: safety
+
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+        labels:
+          service: otel-collector
