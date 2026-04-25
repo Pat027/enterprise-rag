@@ -31,9 +31,14 @@ services:
       # Optimization 4: lower max-model-len 8192 → 4096. Our prompts (system +
       # 5 retrieved chunks + query) comfortably fit in 4K. Frees KV cache budget.
       - --max-model-len=4096
-      # Optimization 5: bump GPU memory utilization 0.55 → 0.90. Headroom freed
-      # by FP8 weights + FP8 KV → much larger KV cache → better continuous batching.
-      - --gpu-memory-utilization=0.90
+      # Optimization 5: GPU memory utilization 0.80. Earlier round had this at 0.90;
+      # spec decoding's draft model needs ~3 GB so we drop it to leave headroom.
+      - --gpu-memory-utilization=0.80
+      # Optimization 6: speculative decoding with Llama 3.2 1B as draft. Same
+      # Llama family → high acceptance rate. Draft proposes 5 tokens, target
+      # verifies in one forward pass. See docs/vllm-optimization.md §6.
+      - --speculative-model=meta-llama/Llama-3.2-1B-Instruct
+      - --num-speculative-tokens=5
       - --port=8000
     environment:
       - HF_TOKEN=${HF_TOKEN}

@@ -59,12 +59,16 @@ def critique(query: str, context: str, response: str) -> SafetyVerdict:
         principles=principles_text, query=query, context=context, response=response
     )
 
+    # Note: response_format={"type":"json_object"} (xgrammar guided decoding) is
+    # *not* used here — vLLM 0.6.6 has an incompatibility between guided decoding
+    # and speculative decoding. Our parse below is tolerant: it locates the first
+    # `{` and last `}` and decodes the slice. The system instruction in the prompt
+    # asks for strict JSON, which Llama 3.1 8B reliably produces.
     completion = _client().chat.completions.create(
         model=s.vllm_gen_model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=512,
-        response_format={"type": "json_object"},
     )
     raw = (completion.choices[0].message.content or "").strip()
 
