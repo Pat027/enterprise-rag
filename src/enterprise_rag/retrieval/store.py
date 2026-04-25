@@ -55,6 +55,11 @@ def upsert_chunks(chunks: list[Chunk]) -> int:
         for c, vec in zip(chunks, vectors, strict=True)
     ]
     client.upsert(collection_name=settings.qdrant_collection, points=points)
+
+    # Also index into BM25 (lazy import to avoid disk I/O at module load time).
+    from . import bm25 as _bm25
+
+    _bm25.add_chunks(chunks)
     return len(points)
 
 

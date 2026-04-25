@@ -39,10 +39,20 @@ class Settings(BaseSettings):
     # ── Retrieval ──
     top_k_retrieve: int = Field(default=20, ge=1, le=100)
     top_k_rerank: int = Field(default=5, ge=1, le=20)
+    retrieval_mode: str = "hybrid"  # "dense" | "bm25" | "hybrid"
 
     # ── API ──
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+
+    # ── Auth & rate limiting ──
+    api_keys_csv: str = Field(default="", alias="API_KEYS")
+    rate_limit_per_min: int = 60
+    rate_limit_burst: int = 10
+
+    def api_keys(self) -> set[str]:
+        """Parse comma-separated API keys; empty set means auth disabled."""
+        return {k.strip() for k in self.api_keys_csv.split(",") if k.strip()}
 
 
 _settings: Settings | None = None
