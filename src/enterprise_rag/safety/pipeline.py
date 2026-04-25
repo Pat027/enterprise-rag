@@ -34,7 +34,7 @@ def check_input(text: str) -> SafetyVerdict | None:
 
     if s.safety_llamaguard:
         try:
-            v = llamaguard.moderate(text, role="user")
+            v = llamaguard.check_user_input(text)
             if not v.allowed:
                 return v
         except Exception as e:
@@ -49,7 +49,7 @@ def check_output(query: str, context: str, response: str) -> SafetyVerdict | Non
 
     if s.safety_llamaguard:
         try:
-            v = llamaguard.moderate(response, role="assistant")
+            v = llamaguard.check_assistant_output(query, response)
             if not v.allowed:
                 return v
         except Exception as e:

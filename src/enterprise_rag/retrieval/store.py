@@ -63,10 +63,10 @@ def search(query: str, top_k: int) -> list[dict]:
     settings = get_settings()
     client = _client()
     qvec = embed_query(query)
-    results = client.search(
-        collection_name=settings.qdrant_collection, query_vector=qvec, limit=top_k
+    response = client.query_points(
+        collection_name=settings.qdrant_collection, query=qvec, limit=top_k
     )
-    return [{"score": r.score, **(r.payload or {})} for r in results]
+    return [{"score": p.score, **(p.payload or {})} for p in response.points]
 
 
 def _uuid_from_chunk_id(chunk_id: str) -> str:

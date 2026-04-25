@@ -83,18 +83,12 @@ services:
       vllm-guard:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8088:8000"
     environment:
       - QDRANT_URL=http://qdrant:6333
       - VLLM_GEN_URL=http://vllm-gen:8000/v1
       - VLLM_GUARD_URL=http://vllm-guard:8000/v1
     env_file:
       - .env
-    # Embeddings + reranker run inside the API container — claim GPU 1
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["1"]
-              capabilities: [gpu]
+    # Embeddings + reranker default to CPU; set EMBEDDER_DEVICE=cuda + add a
+    # GPU reservation here once a free GPU is available on the host.
