@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # ── Generation / Constitutional critic — local vLLM (Llama 3.1 70B FP8) ──
     vllm_gen_url: str = "http://vllm-gen:8000/v1"
-    vllm_gen_model: str = "meta-llama/Llama-3.1-8B-Instruct"
+    vllm_gen_model: str = "neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8-dynamic"
     vllm_gen_api_key: str = "EMPTY"  # vLLM doesn't authenticate by default
 
     # ── LlamaGuard 3 8B served by a separate vLLM instance ──

@@ -13,14 +13,27 @@ services:
       timeout: 3s
       retries: 20
 
-  # Generation + constitutional critic — Llama 3.1 8B Instruct on 1× L40S
+  # Generation + constitutional critic — Llama 3.1 8B Instruct FP8 on 1× L40S.
+  # See docs/vllm-optimization.md for the rationale behind each flag.
   vllm-gen:
     image: vllm/vllm-openai:v0.6.6
     container_name: enterprise-rag-vllm-gen
     command:
-      - --model=meta-llama/Llama-3.1-8B-Instruct
-      - --max-model-len=8192
-      - --gpu-memory-utilization=0.55
+      # Optimization 1: FP8 model weights — half memory, ~1.3-1.5× throughput on
+      # Ada (L40S has native FP8 tensor cores). Quality drop <1% on benchmarks.
+      - --model=neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8-dynamic
+      # Optimization 2: FP8 KV cache — KV is the dominant memory cost during
+      # decode. Halves it; quality impact negligible for our short-context flow.
+      - --kv-cache-dtype=fp8
+      # Optimization 3: prefix caching — our system prompt is identical for every
+      # query. vLLM hashes prompt prefixes and reuses their KV. Big TTFT win.
+      - --enable-prefix-caching
+      # Optimization 4: lower max-model-len 8192 → 4096. Our prompts (system +
+      # 5 retrieved chunks + query) comfortably fit in 4K. Frees KV cache budget.
+      - --max-model-len=4096
+      # Optimization 5: bump GPU memory utilization 0.55 → 0.90. Headroom freed
+      # by FP8 weights + FP8 KV → much larger KV cache → better continuous batching.
+      - --gpu-memory-utilization=0.90
       - --port=8000
     environment:
       - HF_TOKEN=${HF_TOKEN}
@@ -42,13 +55,16 @@ services:
       retries: 30
       start_period: 180s
 
-  # LlamaGuard 3 8B on 1× L40S
+  # LlamaGuard 3 8B on 1× L40S (BF16 — no widely-published FP8 variant yet).
+  # Inherits FP8 KV cache + prefix caching for the same reasons as vllm-gen.
   vllm-guard:
     image: vllm/vllm-openai:v0.6.6
     container_name: enterprise-rag-vllm-guard
     command:
       - --model=meta-llama/Llama-Guard-3-8B
-      - --max-model-len=4096
+      - --kv-cache-dtype=fp8
+      - --enable-prefix-caching
+      - --max-model-len=2048   # LlamaGuard taxonomy + short turns fit easily
       - --gpu-memory-utilization=0.55
       - --port=8000
     environment:
