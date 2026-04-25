@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     top_k_retrieve: int = Field(default=20, ge=1, le=100)
     top_k_rerank: int = Field(default=5, ge=1, le=20)
     retrieval_mode: str = "hybrid"  # "dense" | "bm25" | "hybrid"
+    rag_strategy: str = "direct"  # "direct" | "hyde" | "multi_query" | "step_back"
 
     # ── API ──
     api_host: str = "0.0.0.0"
