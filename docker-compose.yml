@@ -13,15 +13,14 @@ services:
       timeout: 3s
       retries: 20
 
-  # Generation + constitutional critic — Llama 3.1 70B FP8 on 2× L40S (TP=2)
+  # Generation + constitutional critic — Llama 3.1 8B Instruct on 1× L40S
   vllm-gen:
     image: vllm/vllm-openai:v0.6.6
     container_name: enterprise-rag-vllm-gen
     command:
-      - --model=neuralmagic/Meta-Llama-3.1-70B-Instruct-FP8-dynamic
-      - --tensor-parallel-size=2
+      - --model=meta-llama/Llama-3.1-8B-Instruct
       - --max-model-len=8192
-      - --gpu-memory-utilization=0.92
+      - --gpu-memory-utilization=0.55
       - --port=8000
     environment:
       - HF_TOKEN=${HF_TOKEN}
@@ -34,14 +33,14 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["0", "2"]
+              device_ids: ["0"]
               capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
       interval: 15s
       timeout: 5s
       retries: 30
-      start_period: 300s
+      start_period: 180s
 
   # LlamaGuard 3 8B on 1× L40S
   vllm-guard:
@@ -50,7 +49,7 @@ services:
     command:
       - --model=meta-llama/Llama-Guard-3-8B
       - --max-model-len=4096
-      - --gpu-memory-utilization=0.85
+      - --gpu-memory-utilization=0.55
       - --port=8000
     environment:
       - HF_TOKEN=${HF_TOKEN}
@@ -90,5 +89,11 @@ services:
       - VLLM_GUARD_URL=http://vllm-guard:8000/v1
     env_file:
       - .env
-    # Embeddings + reranker default to CPU; set EMBEDDER_DEVICE=cuda + add a
-    # GPU reservation here once a free GPU is available on the host.
+    # Embeddings + reranker on dedicated GPU 2 (freed by 70B → 8B switch).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["2"]
+              capabilities: [gpu]
