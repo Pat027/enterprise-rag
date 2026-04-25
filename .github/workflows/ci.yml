@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v3
+      - name: Install ruff
+        run: uv pip install --system "ruff>=0.8"
+      - name: Ruff check
+        run: ruff check src/ tests/ benchmarks/
+
+  type-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: py_compile all sources
+        run: |
+          python -m py_compile $(find src benchmarks tests -name "*.py")
+
+  compose-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provide .env from example
+        run: cp .env.example .env
+      - name: docker compose config
+        run: docker compose config --quiet
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v3
+      - name: Install dev deps
+        run: uv sync --extra dev
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -q
