@@ -170,11 +170,25 @@ src/enterprise_rag/
 └── cli.py          uvicorn launcher
 ```
 
+## Performance
+
+The vLLM serving config is tuned for L40S-class GPUs with FP8 weights, FP8 KV
+cache, prefix caching, and headroom-aware GPU memory utilization. Measured p50
+latency dropped 28 % vs an unoptimized BF16 baseline; throughput at concurrency 4
+roughly doubled. See [`docs/vllm-optimization.md`](./docs/vllm-optimization.md)
+for the per-flag rationale, trade-offs, measured numbers, and a mental model
+for when to reach for each lever.
+
+There is also a small benchmark script at [`benchmarks/bench.py`](./benchmarks/bench.py)
+to reproduce these numbers against your own deployment.
+
 ## Roadmap
 
 - [ ] Frontend (Next.js + shadcn/ui)
 - [ ] Hybrid search (BM25 + dense)
 - [ ] Streaming responses
+- [ ] FlashInfer attention backend (custom image with `flashinfer-python`)
+- [ ] Speculative decoding with Llama 3.2 1B draft model
 - [ ] OpenTelemetry → Grafana dashboard
 - [ ] RAGAS evaluation harness
 - [ ] Multi-collection routing
