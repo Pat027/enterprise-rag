@@ -1,0 +1,660 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Comprehensive unit tests for rag_server/main.py to improve coverage."""
+
+import asyncio
+import json
+import os
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
+import requests
+from fastapi.testclient import TestClient
+
+from nvidia_rag.rag_server.main import NvidiaRAG
+from nvidia_rag.rag_server.reflection import (
+    check_context_relevance,
+    check_response_groundedness,
+)
+from nvidia_rag.rag_server.response_generator import APIError
+from nvidia_rag.utils.health_models import RAGHealthResponse
+from nvidia_rag.utils.vdb.vdb_base import VDBRag
+
+
+class TestAPIError:
+    """Test cases for APIError class."""
+
+    def test_api_error_init_default_code(self):
+        """Test APIError initialization with default code."""
+        error = APIError("Test error message")
+
+        assert error.message == "Test error message"
+        assert error.status_code == 400
+        assert str(error) == "Test error message"
+
+    def test_api_error_init_custom_code(self):
+        """Test APIError initialization with custom code."""
+        error = APIError("Test error message", 500)
+
+        assert error.message == "Test error message"
+        assert error.status_code == 500
+        assert str(error) == "Test error message"
+
+    @patch("nvidia_rag.rag_server.response_generator.logger")
+    def test_api_error_logging(self, mock_logger):
+        """Test that APIError logs error message."""
+        APIError("Test error message", 500)
+
+        mock_logger.error.assert_called_with(
+            "APIError occurred: %s with HTTP status: %d", "Test error message", 500
+        )
+
+
+class TestNvidiaRAGInit:
+    """Test cases for NvidiaRAG initialization."""
+
+    def test_init_with_none_vdb_op(self):
+        """Test initialization with None vdb_op."""
+        rag = NvidiaRAG(vdb_op=None)
+        assert rag.vdb_op is None
+
+    def test_init_with_valid_vdb_op(self):
+        """Test initialization with valid VDBRag instance."""
+        mock_vdb_op = Mock(spec=VDBRag)
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+        assert rag.vdb_op == mock_vdb_op
+
+    def test_init_with_invalid_vdb_op(self):
+        """Test initialization with invalid vdb_op type."""
+        with pytest.raises(
+            ValueError,
+            match="vdb_op must be an instance of nvidia_rag.utils.vdb.vdb_base.VDBRag",
+        ):
+            NvidiaRAG(vdb_op="invalid_type")
+
+    def test_init_with_invalid_vdb_op_class(self):
+        """Test initialization with invalid vdb_op class."""
+
+        class InvalidVDB:
+            pass
+
+        with pytest.raises(
+            ValueError,
+            match="vdb_op must be an instance of nvidia_rag.utils.vdb.vdb_base.VDBRag",
+        ):
+            NvidiaRAG(vdb_op=InvalidVDB())
+
+    def test_init_with_prompts_dict(self):
+        """Test initialization with prompts as a dictionary."""
+        custom_prompts = {
+            "rag_template": {
+                "system": "Custom system",
+                "human": "Custom human {context}",
+            },
+            "custom_key": "custom_value",
+        }
+        rag = NvidiaRAG(prompts=custom_prompts)
+
+        assert isinstance(rag.prompts, dict)
+        # Custom prompts should be merged with defaults
+        assert "custom_key" in rag.prompts
+        assert rag.prompts["custom_key"] == "custom_value"
+
+    def test_init_with_prompts_none(self):
+        """Test initialization with prompts=None (default behavior)."""
+        rag = NvidiaRAG(prompts=None)
+
+        assert isinstance(rag.prompts, dict)
+        # Should have default prompts loaded
+        assert len(rag.prompts) > 0
+
+    def test_init_with_invalid_prompts_file(self):
+        """Test initialization with invalid prompts file path falls back to defaults."""
+        # Invalid file path should not crash, just use defaults
+        rag = NvidiaRAG(prompts="/nonexistent/path/to/prompts.yaml")
+
+        assert isinstance(rag.prompts, dict)
+        # Should still have prompts (defaults)
+        assert len(rag.prompts) > 0
+
+
+class TestNvidiaRAGHealth:
+    """Test cases for NvidiaRAG health method."""
+
+    @pytest.mark.asyncio
+    async def test_health_basic(self):
+        """Test basic health check without dependencies."""
+        rag = NvidiaRAG()
+
+        with patch.object(rag, "_prepare_vdb_op") as mock_prepare:
+            mock_prepare.return_value = Mock()
+
+            result = await rag.health(check_dependencies=False)
+
+            assert isinstance(result, RAGHealthResponse)
+            assert result.message == "Service is up."
+            # Verify VDB preparation is NOT called for simple health checks
+            mock_prepare.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_health_with_dependencies(self):
+        """Test health check with dependencies."""
+        rag = NvidiaRAG()
+
+        mock_vdb_op = Mock()
+        mock_dependencies = RAGHealthResponse(message="Service is up.")
+
+        with patch.object(rag, "_prepare_vdb_op") as mock_prepare:
+            with patch(
+                "nvidia_rag.rag_server.main.check_all_services_health"
+            ) as mock_check:
+                mock_prepare.return_value = mock_vdb_op
+                mock_check.return_value = mock_dependencies
+
+                result = await rag.health(check_dependencies=True)
+
+                assert isinstance(result, RAGHealthResponse)
+                assert result.message == "Service is up."
+                # Verify VDB preparation IS called when checking dependencies
+                mock_prepare.assert_called_once()
+                # Verify check_all_services_health was called with vdb_op and config
+                mock_check.assert_called_once()
+                call_args = mock_check.call_args
+                assert (
+                    call_args[0][0] == mock_vdb_op
+                )  # First argument should be mock_vdb_op
+                # Second argument should be a NvidiaRAGConfig instance
+                assert len(call_args[0]) == 2  # Should have 2 positional arguments
+
+
+class TestNvidiaRAGPrepareVDBOp:
+    """Test cases for NvidiaRAG __prepare_vdb_op method."""
+
+    def test_prepare_vdb_op_with_existing_vdb_op(self):
+        """Test __prepare_vdb_op when vdb_op is already set."""
+        mock_vdb_op = Mock(spec=VDBRag)
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+
+        result = rag._prepare_vdb_op()
+        assert result == mock_vdb_op
+
+    def test_prepare_vdb_op_with_vdb_endpoint_error(self):
+        """Test __prepare_vdb_op with vdb_endpoint when vdb_op is set."""
+        mock_vdb_op = Mock(spec=VDBRag)
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+
+        with pytest.raises(
+            ValueError,
+            match="vdb_endpoint is not supported when vdb_op is provided during initialization",
+        ):
+            rag._prepare_vdb_op(vdb_endpoint="http://test.com")
+
+    def test_prepare_vdb_op_with_embedding_model_error(self):
+        """Test __prepare_vdb_op with embedding_model when vdb_op is set."""
+        mock_vdb_op = Mock(spec=VDBRag)
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+
+        with pytest.raises(
+            ValueError,
+            match="embedding_model is not supported when vdb_op is provided during initialization",
+        ):
+            rag._prepare_vdb_op(embedding_model="test-model")
+
+    def test_prepare_vdb_op_with_embedding_endpoint_error(self):
+        """Test __prepare_vdb_op with embedding_endpoint when vdb_op is set."""
+        mock_vdb_op = Mock(spec=VDBRag)
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+
+        with pytest.raises(
+            ValueError,
+            match="embedding_endpoint is not supported when vdb_op is provided during initialization",
+        ):
+            rag._prepare_vdb_op(embedding_endpoint="http://test.com")
+
+    @patch("nvidia_rag.rag_server.main.get_embedding_model")
+    @patch("nvidia_rag.rag_server.main._get_vdb_op")
+    def test_prepare_vdb_op_without_existing_vdb_op(
+        self, mock_get_vdb, mock_get_embedding
+    ):
+        """Test __prepare_vdb_op when vdb_op is not set."""
+        # Setup mocks
+        mock_embedder = Mock()
+        mock_get_embedding.return_value = mock_embedder
+
+        mock_vdb_op = Mock(spec=VDBRag)
+        mock_get_vdb.return_value = mock_vdb_op
+
+        rag = NvidiaRAG()
+
+        result = rag._prepare_vdb_op()
+
+        assert result == mock_vdb_op
+        assert (
+            mock_get_embedding.call_count >= 1
+        )  # Called during init and __prepare_vdb_op
+        assert mock_get_vdb.call_count >= 1  # Called during __prepare_vdb_op
+
+    @patch("nvidia_rag.rag_server.main.get_embedding_model")
+    @patch("nvidia_rag.rag_server.main._get_vdb_op")
+    def test_prepare_vdb_op_with_custom_parameters(
+        self, mock_get_vdb, mock_get_embedding
+    ):
+        """Test __prepare_vdb_op with custom parameters."""
+        # Setup mocks
+        mock_embedder = Mock()
+        mock_get_embedding.return_value = mock_embedder
+
+        mock_vdb_op = Mock(spec=VDBRag)
+        mock_get_vdb.return_value = mock_vdb_op
+
+        rag = NvidiaRAG()
+
+        result = rag._prepare_vdb_op(
+            vdb_endpoint="http://custom-vdb.com",
+            embedding_model="custom-model",
+            embedding_endpoint="http://custom-embedding.com",
+        )
+
+        assert result == mock_vdb_op
+        assert (
+            mock_get_embedding.call_count >= 1
+        )  # Called during init and __prepare_vdb_op
+        assert mock_get_vdb.call_count >= 1  # Called during __prepare_vdb_op
+
+
+class TestNvidiaRAGValidateCollections:
+    """Test cases for NvidiaRAG _validate_collections_exist method."""
+
+    def test_validate_collections_exist_success(self):
+        """Test successful collection validation."""
+        mock_vdb_op = Mock(spec=VDBRag)
+        mock_vdb_op.check_collection_exists.return_value = True
+
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+
+        # Should not raise any exception
+        rag._validate_collections_exist(["collection1", "collection2"], mock_vdb_op)
+
+    def test_validate_collections_exist_missing_collection(self):
+        """Test collection validation with missing collection."""
+        mock_vdb_op = Mock(spec=VDBRag)
+        mock_vdb_op.check_collection_exists.side_effect = (
+            lambda name: name == "collection1"
+        )
+
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+
+        with pytest.raises(APIError, match="Collection collection2 does not exist"):
+            rag._validate_collections_exist(["collection1", "collection2"], mock_vdb_op)
+
+    def test_validate_collections_exist_empty_collections(self):
+        """Test collection validation with empty collections list."""
+        mock_vdb_op = Mock(spec=VDBRag)
+
+        rag = NvidiaRAG(vdb_op=mock_vdb_op)
+
+        # Should not raise any exception for empty list
+        rag._validate_collections_exist([], mock_vdb_op)
+
+
+class TestNvidiaRAGExtractTextFromContent:
+    """Test cases for NvidiaRAG _extract_text_from_content method."""
+
+    def test_extract_text_from_string(self):
+        """Test extracting text from string content."""
+        rag = NvidiaRAG()
+
+        result = rag._extract_text_from_content("Hello world")
+        assert result == "Hello world"
+
+    def test_extract_text_from_multimodal_list(self):
+        """Test extracting text from multimodal list content."""
+        rag = NvidiaRAG()
+
+        content = [
+            {"type": "text", "text": "Hello"},
+            {"type": "text", "text": "world"},
+            {"type": "image_url", "image_url": "http://example.com/image.jpg"},
+        ]
+
+        result = rag._extract_text_from_content(content)
+        assert result == "Hello world"
+
+    def test_extract_text_from_list_without_text(self):
+        """Test extracting text from list without text items."""
+        rag = NvidiaRAG()
+
+        content = [{"type": "image_url", "image_url": "http://example.com/image.jpg"}]
+
+        result = rag._extract_text_from_content(content)
+        assert result == ""
+
+    def test_extract_text_from_other_type(self):
+        """Test extracting text from other content types."""
+        rag = NvidiaRAG()
+
+        result = rag._extract_text_from_content(123)
+        assert result == "123"
+
+
+class TestNvidiaRAGContainsImages:
+    """Test cases for NvidiaRAG _contains_images method."""
+
+    def test_contains_images_string(self):
+        """Test _contains_images with string content."""
+        rag = NvidiaRAG()
+
+        result = rag._contains_images("Hello world")
+        assert result is False
+
+    def test_contains_images_multimodal_list_with_images(self):
+        """Test _contains_images with multimodal list containing images."""
+        rag = NvidiaRAG()
+
+        content = [
+            {"type": "text", "text": "Hello world"},
+            {"type": "image_url", "image_url": "http://example.com/image1.jpg"},
+        ]
+
+        result = rag._contains_images(content)
+        assert result is True
+
+    def test_contains_images_multimodal_list_without_images(self):
+        """Test _contains_images with multimodal list without images."""
+        rag = NvidiaRAG()
+
+        content = [
+            {"type": "text", "text": "Hello world"},
+            {"type": "text", "text": "More text"},
+        ]
+
+        result = rag._contains_images(content)
+        assert result is False
+
+    def test_contains_images_other_type(self):
+        """Test _contains_images with other content types."""
+        rag = NvidiaRAG()
+
+        content = {"some": "data"}
+
+        result = rag._contains_images(content)
+        assert result is False
+
+
+class TestNvidiaRAGBuildRetrieverQuery:
+    """Test cases for NvidiaRAG _build_retriever_query_from_content method."""
+
+    def test_build_retriever_query_from_string(self):
+        """Test building retriever query from string content."""
+        rag = NvidiaRAG()
+
+        result = rag._build_retriever_query_from_content("Hello world")
+        assert result == ("Hello world", False)
+
+    def test_build_retriever_query_from_multimodal_list(self):
+        """Test building retriever query from multimodal list content."""
+        rag = NvidiaRAG()
+
+        content = [
+            {"type": "text", "text": "Hello"},
+            {"type": "text", "text": "world"},
+            {"type": "image_url", "image_url": {"url": "http://example.com/image.jpg"}},
+        ]
+
+        result = rag._build_retriever_query_from_content(content)
+        # Text parts joined with \n\n first, then image URL with space separator
+        assert result == ("Hello\n\nworld http://example.com/image.jpg", True)
+
+    def test_build_retriever_query_from_list_without_text(self):
+        """Test building retriever query from list without text items."""
+        rag = NvidiaRAG()
+
+        content = [
+            {"type": "image_url", "image_url": {"url": "http://example.com/image.jpg"}}
+        ]
+
+        result = rag._build_retriever_query_from_content(content)
+        # Image-only: no text, so final query is just the image URL (no leading space)
+        assert result == ("http://example.com/image.jpg", True)
+
+    def test_build_retriever_query_from_other_type(self):
+        """Test building retriever query from other content types."""
+        rag = NvidiaRAG()
+
+        result = rag._build_retriever_query_from_content(123)
+        assert result == ("123", False)
+
+
+class TestNvidiaRAGPrintConversationHistory:
+    """Test cases for NvidiaRAG __print_conversation_history method."""
+
+    def test_print_conversation_history(self):
+        """Test printing conversation history."""
+        rag = NvidiaRAG()
+
+        conversation_history = [("user", "Hello"), ("assistant", "Hi there!")]
+
+        with patch("nvidia_rag.rag_server.main.logger") as mock_logger:
+            rag._print_conversation_history(conversation_history)
+
+            # Verify debug log was called
+            assert mock_logger.debug.call_count > 0
+
+    def test_print_conversation_history_empty(self):
+        """Test printing empty conversation history."""
+        rag = NvidiaRAG()
+
+        with patch("nvidia_rag.rag_server.main.logger") as mock_logger:
+            rag._print_conversation_history([])
+
+            # Should not call debug log with empty history
+            assert mock_logger.debug.call_count == 0
+
+
+class TestNvidiaRAGNormalizeRelevanceScores:
+    """Test cases for NvidiaRAG __normalize_relevance_scores method."""
+
+    def test_normalize_relevance_scores(self):
+        """Test normalizing relevance scores."""
+        rag = NvidiaRAG()
+
+        documents = [
+            Mock(metadata={"relevance_score": 0.8}),
+            Mock(metadata={"relevance_score": 0.6}),
+            Mock(metadata={"relevance_score": 0.4}),
+        ]
+
+        result = rag._normalize_relevance_scores(documents)
+
+        # Should return the same documents
+        assert len(result) == 3
+        assert result == documents
+
+    def test_normalize_relevance_scores_empty(self):
+        """Test normalizing relevance scores with empty list."""
+        rag = NvidiaRAG()
+
+        result = rag._normalize_relevance_scores([])
+
+        assert result == []
+
+
+class TestNvidiaRAGFormatDocumentWithSource:
+    """Test cases for NvidiaRAG __format_document_with_source method."""
+
+    def test_format_document_with_source(self):
+        """Test formatting document with source."""
+        rag = NvidiaRAG()
+
+        doc = Mock()
+        doc.page_content = "Test content"
+        doc.metadata = {"source": "test.pdf"}
+
+        with patch.dict(os.environ, {"ENABLE_SOURCE_METADATA": "True"}):
+            result = rag._format_document_with_source(doc)
+
+            assert "Test content" in result
+            assert "File: test" in result
+
+    def test_format_document_without_source(self):
+        """Test formatting document without source."""
+        rag = NvidiaRAG()
+
+        doc = Mock()
+        doc.page_content = "Test content"
+        doc.metadata = {}
+
+        with patch.dict(os.environ, {"ENABLE_SOURCE_METADATA": "True"}):
+            result = rag._format_document_with_source(doc)
+
+            assert result == "Test content"
+
+    def test_format_document_with_nested_source(self):
+        """Test formatting document with nested source."""
+        rag = NvidiaRAG()
+
+        doc = Mock()
+        doc.page_content = "Test content"
+        doc.metadata = {"source": {"source_name": "test.pdf"}}
+
+        with patch.dict(os.environ, {"ENABLE_SOURCE_METADATA": "True"}):
+            result = rag._format_document_with_source(doc)
+
+            assert "Test content" in result
+            assert "File: test" in result
+
+
+class TestInitErrorsTracking:
+    """Tests for _init_errors tracking in NvidiaRAG initialization"""
+
+    @patch("nvidia_rag.rag_server.main.get_embedding_model")
+    @patch("nvidia_rag.rag_server.main.get_ranking_model")
+    @patch("nvidia_rag.rag_server.main.get_llm")
+    @patch("nvidia_rag.rag_server.main._get_vdb_op")
+    def test_init_errors_tracking_embedding_failure(
+        self, mock_get_vdb, mock_get_llm, mock_get_ranking, mock_get_embedding
+    ):
+        """Test that embedding initialization errors are tracked in _init_errors"""
+        mock_get_vdb.return_value = Mock(spec=VDBRag)
+        mock_get_llm.return_value = Mock()
+        mock_get_ranking.return_value = Mock()
+        mock_get_embedding.side_effect = requests.exceptions.ConnectionError(
+            "Connection failed"
+        )
+
+        rag = NvidiaRAG()
+
+        assert "embeddings" in rag._init_errors
+        assert rag.document_embedder is None
+        assert "Connection failed" in rag._init_errors["embeddings"]
+
+    @patch("nvidia_rag.rag_server.main.get_embedding_model")
+    @patch("nvidia_rag.rag_server.main.get_ranking_model")
+    @patch("nvidia_rag.rag_server.main.get_llm")
+    @patch("nvidia_rag.rag_server.main._get_vdb_op")
+    def test_init_errors_tracking_ranker_failure(
+        self, mock_get_vdb, mock_get_llm, mock_get_ranking, mock_get_embedding
+    ):
+        """Test that ranker initialization errors are tracked in _init_errors"""
+        mock_get_vdb.return_value = Mock(spec=VDBRag)
+        mock_get_llm.return_value = Mock()
+        mock_get_embedding.return_value = Mock()
+        mock_get_ranking.side_effect = requests.exceptions.ConnectionError(
+            "Ranker connection failed"
+        )
+
+        rag = NvidiaRAG()
+
+        assert "ranking" in rag._init_errors
+        assert rag.ranker is None
+        assert "Ranker connection failed" in rag._init_errors["ranking"]
+
+    @patch("nvidia_rag.rag_server.main.get_embedding_model")
+    @patch("nvidia_rag.rag_server.main.get_ranking_model")
+    @patch("nvidia_rag.rag_server.main.get_llm")
+    @patch("nvidia_rag.rag_server.main._get_vdb_op")
+    def test_init_errors_empty_on_success(
+        self, mock_get_vdb, mock_get_llm, mock_get_ranking, mock_get_embedding
+    ):
+        """Test that _init_errors is empty when all services initialize successfully"""
+        mock_get_vdb.return_value = Mock(spec=VDBRag)
+        mock_get_embedding.return_value = Mock()
+        mock_get_ranking.return_value = Mock()
+        mock_get_llm.return_value = Mock()
+
+        rag = NvidiaRAG()
+
+        assert rag._init_errors == {}
+
+
+class TestReflectionLLMValidation:
+    """Tests for reflection LLM validation"""
+
+    @patch("nvidia_rag.rag_server.reflection.get_llm")
+    @patch("nvidia_rag.rag_server.reflection.get_prompts")
+    @pytest.mark.asyncio
+    async def test_check_context_relevance_without_reflection_llm(
+        self, _mock_get_prompts, _mock_get_llm
+    ):
+        """Test that check_context_relevance raises APIError when reflection enabled but LLM not configured"""
+        mock_config = MagicMock()
+        mock_reflection = MagicMock()
+        mock_reflection.enabled = True
+        mock_reflection.model_name = ""
+        mock_reflection.server_url = "http://test.com"
+        mock_reflection.get_api_key.return_value = "test_key"
+        mock_config.reflection = mock_reflection
+
+        with pytest.raises(APIError) as exc_info:
+            await check_context_relevance(
+                retriever_query="test query",
+                collection_names=["test_collection"],
+                vdb_op=Mock(),
+                ranker=Mock(),
+                reflection_counter=Mock(),
+                config=mock_config,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "reflection_llm" in exc_info.value.message.lower()
+
+    @patch("nvidia_rag.rag_server.reflection.get_llm")
+    @patch("nvidia_rag.rag_server.reflection.get_prompts")
+    @pytest.mark.asyncio
+    async def test_check_response_groundedness_without_reflection_llm(
+        self, _mock_get_prompts, _mock_get_llm
+    ):
+        """Test that check_response_groundedness raises APIError when reflection enabled but LLM not configured"""
+        mock_config = MagicMock()
+        mock_reflection = MagicMock()
+        mock_reflection.enabled = True
+        mock_reflection.model_name = ""
+        mock_reflection.server_url = "http://test.com"
+        mock_reflection.get_api_key.return_value = "test_key"
+        mock_config.reflection = mock_reflection
+
+        with pytest.raises(APIError) as exc_info:
+            await check_response_groundedness(
+                query="test query",
+                response="test response",
+                context=[],
+                reflection_counter=Mock(),
+                config=mock_config,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "reflection_llm" in exc_info.value.message.lower()

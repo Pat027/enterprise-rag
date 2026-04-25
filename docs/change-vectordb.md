@@ -1,0 +1,1194 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+# Configure Elasticsearch as Your Vector Database for NVIDIA RAG Blueprint
+
+The [NVIDIA RAG Blueprint](readme.md) supports multiple vector database backends including [Milvus](https://milvus.io/docs) and [Elasticsearch](https://www.elastic.co/elasticsearch/vector-database).
+Elasticsearch provides robust search capabilities and can be used as an alternative to Milvus for storing and retrieving document embeddings.
+
+After you have [deployed the blueprint](readme.md#deployment-options-for-rag-blueprint),
+use this documentation to configure Elasticsearch as your vector database.
+
+:::{tip}
+To navigate this page more easily, click the outline button at the top of the page. ![outline-button](assets/outline-button.png)
+
+
+## Prerequisites and Important Considerations Before You Start
+
+The following are some important notes to keep in mind before you switch from Milvus to Elasticsearch.
+
+- **Elasticsearch Dependency** – Elasticsearch support is provided as an optional dependency. For local development, install it with:
+    ```bash
+    pip install nvidia_rag[elasticsearch]
+    ```
+    Or when using uv:
+    ```bash
+    uv sync --extra elasticsearch
+    ```
+    The Docker images already include this dependency by default.
+
+- **Fresh Setup Required** – When you switch from Milvus to Elasticsearch, you need to re-upload your documents. The data stored in Milvus isn't automatically migrated to Elasticsearch.
+
+- **Port Availability** – Elasticsearch runs on port 9200 by default. Ensure this port is available and not in conflict with other services.
+
+- **Folder Permissions** – Elasticsearch data is persisted in the `volumes/elasticsearch` directory. Make sure you create the directory and have appropriate permissions set.
+
+    ```bash
+    sudo mkdir -p deploy/compose/volumes/elasticsearch/
+    sudo chown -R 1000:1000 deploy/compose/volumes/elasticsearch/
+    ```
+
+   :::{note}
+   If the Elasticsearch container fails to start due to permission issues, you may optionally use `sudo chmod -R 777 deploy/compose/volumes/elasticsearch/` for broader access
+   :::
+
+
+## Docker Compose Configuration for Elasticsearch Vector Database
+
+Use the following steps to configure Elasticsearch as your vector database in Docker.
+
+1. Start the Elasticsearch container.
+
+   ```bash
+   docker compose -f deploy/compose/vectordb.yaml --profile elasticsearch up -d
+   ```
+
+2. Set the vector database configuration.
+
+   ```bash
+   export APP_VECTORSTORE_URL="http://elasticsearch:9200"
+   export APP_VECTORSTORE_NAME="elasticsearch"
+   ```
+
+3. Relaunch the RAG and ingestion services.
+
+   ```bash
+   docker compose -f deploy/compose/docker-compose-ingestor-server.yaml up -d
+   docker compose -f deploy/compose/docker-compose-rag-server.yaml up -d
+   ```
+
+4. Update the RAG UI configuration.
+
+   Access the RAG UI at `http://<host-ip>:8090`. In the UI, navigate to: Settings > Endpoint Configuration > Vector Database Endpoint → set to `http://elasticsearch:9200`.
+
+## Helm Deployment to Configure Elasticsearch as Vector Database
+
+If you're using Helm for deployment, use the following steps to configure Elasticsearch as your vector database.
+
+:::{note}
+**Performance Consideration**: Slow VDB upload is observed in Helm deployments for Elasticsearch (ES). For more details, refer to the [troubleshooting documentation](./troubleshooting.md).
+:::
+
+### Prerequisites
+
+1. Install the ECK (Elastic Cloud on Kubernetes) operator:
+
+   The ECK operator is required to manage Elasticsearch deployments on Kubernetes.
+
+   ```bash
+   # Add Elastic Helm repository
+   helm repo add elastic https://helm.elastic.co
+   helm repo update
+
+   # Install ECK operator in its own namespace
+   helm install elastic-operator elastic/eck-operator -n elastic-system --create-namespace
+   ```
+
+   :::{tip}
+   The ECK operator manages the Elasticsearch lifecycle, including deployment, upgrades, and configuration management.
+   :::
+
+2. Verify ECK operator installation:
+
+   Ensure the ECK operator is running before proceeding:
+
+   ```bash
+   # Check ECK operator pod status
+   kubectl get pods -n elastic-system
+   # Expected output: elastic-operator-0   1/1   Running
+
+   # Verify ECK operator is ready
+   kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=elastic-operator -n elastic-system --timeout=300s
+   ```
+
+### Configuration Steps
+
+1. Configure Elasticsearch as the vector database in [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml).
+
+   Update both the RAG server and ingestor-server sections:
+
+    ```yaml
+    # RAG Server configuration
+    envVars:
+      APP_VECTORSTORE_URL: "http://rag-eck-elasticsearch-es-http:9200"
+      APP_VECTORSTORE_NAME: "elasticsearch"
+      APP_VECTORSTORE_USERNAME: ""
+      APP_VECTORSTORE_PASSWORD: ""
+
+    # Ingestor Server configuration
+    ingestor-server:
+      envVars:
+        APP_VECTORSTORE_URL: "http://rag-eck-elasticsearch-es-http:9200"
+        APP_VECTORSTORE_NAME: "elasticsearch"
+        APP_VECTORSTORE_USERNAME: ""
+        APP_VECTORSTORE_PASSWORD: ""
+   ```
+
+2. Enable Elasticsearch deployment in [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml).
+
+   ```yaml
+   eck-elasticsearch:
+     enabled: true
+     http:
+       tls:
+         selfSignedCertificate:
+           disabled: true
+     nodeSets:
+     - name: default
+       count: 1
+       config:
+         node.store.allow_mmap: false
+         # Disable authentication for easier setup (default)
+         xpack.security.enabled: false
+         xpack.security.transport.ssl.enabled: false
+   ```
+
+3. Deploy the Helm chart:
+
+   After modifying [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml), apply the changes as described in [Change a Deployment](deploy-helm.md#change-a-deployment).
+
+   For detailed Helm deployment instructions, see [Deploy the RAG Pipeline](deploy-helm.md).
+
+4. Verify Elasticsearch deployment:
+
+   Check that the Elasticsearch pod and service are running:
+
+   ```bash
+   # Check Elasticsearch pod status
+   kubectl get pods -n rag | grep elasticsearch
+   # Expected output: rag-eck-elasticsearch-es-default-0   1/1   Running
+
+   # Check Elasticsearch service
+   kubectl get svc -n rag | grep elasticsearch
+   # Expected services:
+   # - rag-eck-elasticsearch-es-default (ClusterIP, port 9200)
+   # - rag-eck-elasticsearch-es-http (ClusterIP, port 9200)
+   # - rag-eck-elasticsearch-es-transport (ClusterIP, port 9300)
+   
+   # Wait for Elasticsearch to be ready
+   kubectl wait --for=condition=ready pod -l elasticsearch.k8s.elastic.co/cluster-name=rag-eck-elasticsearch -n rag --timeout=300s
+   ```
+
+   Test Elasticsearch health:
+
+   ```bash
+   # Test from inside the cluster
+   kubectl exec -n rag rag-eck-elasticsearch-es-default-0 -- curl -s http://localhost:9200/_cluster/health
+   # Expected: {"cluster_name":"rag-eck-elasticsearch","status":"yellow" or "green",...}
+   ```
+
+5. (Optional) Enable authentication - see [Elasticsearch Authentication (Helm)](#helm-chart) section below if you need to secure your Elasticsearch instance.
+
+6. After the Helm deployment, port-forward the RAG UI service:
+
+   ```bash
+   kubectl port-forward -n rag service/rag-frontend 3000:3000 --address 0.0.0.0
+   ```
+
+7. Access the UI at `http://<host-ip>:3000` and set Settings > Endpoint Configuration > Vector Database Endpoint to `http://rag-eck-elasticsearch-es-http:9200`.
+
+
+## Verify Your Elasticsearch Vector Database Setup
+
+After you complete the setup, verify that Elasticsearch is running correctly:
+
+### For Docker Deployment:
+```bash
+curl -X GET "localhost:9200/_cluster/health?pretty"
+```
+
+### For Helm deployments:
+```bash
+# 1. Get the name of your Elasticsearch pod:
+kubectl get pods -n rag | grep elasticsearch
+
+# 2. Run the following command, replacing <elasticsearch-pod-name> with the actual pod name:
+# Use the pod name from step 1 (e.g. rag-eck-elasticsearch-es-default-0)
+kubectl exec -n rag <elasticsearch-pod-name> -- curl -s "localhost:9200/_cluster/health?pretty"
+
+# Alternative: Port-forward and test from your machine (service name uses Helm release prefix)
+kubectl port-forward -n rag svc/rag-eck-elasticsearch-es-http 9200:9200 &
+curl -X GET "localhost:9200/_cluster/health?pretty"
+```
+
+You should see a response that indicates the cluster status is green or yellow, confirming that Elasticsearch is operational and ready to store embeddings.
+
+## Elasticsearch Authentication
+
+Enable authentication for Elasticsearch to secure your vector database.
+
+### Docker Compose
+
+#### 1. Configure Elasticsearch Authentication (xpack)
+
+Edit `deploy/compose/vectordb.yaml` to enable xpack security by setting `xpack.security.enabled` to true:
+```yaml
+environment:
+  - xpack.security.enabled=true
+```
+
+Uncomment the username and password environment variables in the elasticsearch service in `deploy/compose/vectordb.yaml`:
+```yaml
+- ELASTIC_USERNAME=${APP_VECTORSTORE_USERNAME}
+- ELASTIC_PASSWORD=${APP_VECTORSTORE_PASSWORD}
+```
+
+Add authentication in `healthcheck` in `deploy/compose/vectordb.yaml` by uncommenting the following:
+```yaml
+test: ["CMD", "curl", "-s", "-f", "-u", "${APP_VECTORSTORE_USERNAME}:${APP_VECTORSTORE_PASSWORD}", "http://localhost:9200/_cat/health"]
+```
+and commenting out
+```yaml
+test: ["CMD", "curl", "-s", "-f", "http://localhost:9200/_cat/health"]
+```
+
+
+#### 2. Start Elasticsearch Container with Credentials
+
+Start the Elasticsearch container with username and password:
+
+```bash
+export APP_VECTORSTORE_USERNAME="elastic" # elastic recommended
+export APP_VECTORSTORE_PASSWORD="your-secure-password"
+
+docker compose -f deploy/compose/vectordb.yaml --profile elasticsearch up -d
+```
+
+#### 3. Generate Elasticsearch API Key (Optional but Recommended)
+
+If you prefer to use API key authentication instead of username/password (recommended for production), generate an API key using curl. You need the username and password from the previous step.
+
+```bash
+# Either provide base64 apikey (base64 of "id:secret")
+export APP_VECTORSTORE_APIKEY="base64-id-colon-secret"
+# Or provide split ID/SECRET
+export APP_VECTORSTORE_APIKEY_ID="your_id"
+export APP_VECTORSTORE_APIKEY_SECRET="your_secret"
+
+docker compose -f deploy/compose/vectordb.yaml --profile elasticsearch up -d
+docker compose -f deploy/compose/docker-compose-ingestor-server.yaml up -d
+docker compose -f deploy/compose/docker-compose-rag-server.yaml up -d
+```
+
+### Get an Elasticsearch API key
+
+If security is enabled, create an API key using either curl. You need a user with permission to create API keys (e.g., the built-in `elastic` superuser in dev).
+
+#### 1. Using curl (replace credentials and URL as appropriate):
+```bash
+# If running inside the cluster, port-forward first:
+# kubectl -n rag port-forward svc/rag-eck-elasticsearch-es-http 9200:9200
+
+curl -u elastic:your-secure-password \
+  -X POST "http://127.0.0.1:9200/_security/api_key" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "rag-api-key",
+    "role_descriptors": {}
+  }'
+```
+
+Example response:
+```json
+{
+  "id": "AbCdEfGhIj",
+  "name": "rag-api-key",
+  "expiration": null,
+  "api_key": "ZyXwVuTsRq",
+  "encoded": null
+}
+```
+
+Convert the API key to base64:
+
+```bash
+# Base64 is computed over "<id>:<api_key>"
+echo -n "AbCdEfGhIj:ZyXwVuTsRq" | base64
+# Output example: QWJ...cXE=
+```
+
+#### 4. Set Environment Variables for Authentication
+
+Choose ONE of the following authentication methods:
+
+**Option A: API Key Authentication (Recommended)**
+
+Set environment variables using the base64-encoded API key or split ID/SECRET:
+
+```bash
+# Either provide base64 apikey (base64 of "id:secret")
+export APP_VECTORSTORE_APIKEY="QWJ...cXE="
+
+# Or provide split ID/SECRET
+export APP_VECTORSTORE_APIKEY_ID="AbCdEfGhIj"
+export APP_VECTORSTORE_APIKEY_SECRET="ZyXwVuTsRq"
+```
+
+**Option B: Username/Password Authentication**
+
+If you prefer to use username/password instead of API key:
+
+```bash
+export APP_VECTORSTORE_USERNAME="elastic"
+export APP_VECTORSTORE_PASSWORD="your-secure-password"
+```
+
+#### 5. Start RAG Server and Ingestor Server
+
+Start the RAG and Ingestor services with the authentication credentials:
+
+```bash
+docker compose -f deploy/compose/docker-compose-ingestor-server.yaml up -d
+docker compose -f deploy/compose/docker-compose-rag-server.yaml up -d
+```
+
+:::{note}
+API key authentication takes precedence over username/password when both are configured.
+:::
+
+
+### Helm Chart
+
+Follow these steps to enable authentication for Elasticsearch in your Helm deployment.
+
+#### 1. Enable Elasticsearch Authentication
+
+Edit [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml) to enable X-Pack security. Set the following explicitly:
+
+```yaml
+eck-elasticsearch:
+  nodeSets:
+  - name: default
+    config:
+      node.store.allow_mmap: false
+      xpack.security.enabled: true
+      xpack.security.transport.ssl.enabled: true
+```
+
+:::{important}
+**Key Configuration Flags:**
+- `xpack.security.enabled: true` - Enables authentication (default user: `elastic`). Set this explicitly.
+- `xpack.security.transport.ssl.enabled: true` - Enables SSL for node-to-node communication. Set this explicitly.
+:::
+
+#### 2. Replace Readiness Probe When Security Is Enabled
+
+When X-Pack security is enabled, replace the current `readinessProbe` section under `eck-elasticsearch.nodeSets[0]` in [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml) with the ECK default probe (so the pod uses the readiness port script instead of an unauthenticated curl check). Ensure the following `podTemplate` is present under the same `nodeSets` entry:
+
+```yaml
+eck-elasticsearch:
+  nodeSets:
+  - name: default
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          readinessProbe:
+            exec:
+              command:
+              - bash
+              - -c
+              - /mnt/elastic-internal/scripts/readiness-port-script.sh
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+```
+
+#### 3. Deploy with Authentication Enabled
+
+After modifying [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml), apply the changes as described in [Change a Deployment](deploy-helm.md#change-a-deployment).
+
+Wait for Elasticsearch to restart:
+
+```bash
+# Monitor pod restart
+kubectl get pods -n rag -w | grep elasticsearch
+
+# Wait for pod to be ready
+kubectl wait --for=condition=ready pod -l elasticsearch.k8s.elastic.co/cluster-name=rag-eck-elasticsearch -n rag --timeout=300s
+```
+
+#### 3. Retrieve Elasticsearch Password from Secret
+
+When authentication is enabled, ECK automatically creates a Kubernetes secret containing the `elastic` user password:
+
+```bash
+# Find the Elasticsearch user secret
+kubectl get secrets -n rag | grep elastic-user
+# Expected: rag-eck-elasticsearch-es-elastic-user
+
+# Retrieve the password
+ES_PASSWORD=$(kubectl get secret rag-eck-elasticsearch-es-elastic-user -n rag -o jsonpath='{.data.elastic}' | base64 -d)
+echo "Elasticsearch password: $ES_PASSWORD"
+```
+
+:::{tip}
+Save this password securely. The password is auto-generated by ECK and persists across pod restarts unless the secret is deleted.
+:::
+
+#### 5. Update Deployment with Credentials
+
+Configure the RAG server and ingestor-server to use the retrieved credentials.
+**Update values.yaml (Recommended for Production)**
+
+Edit [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml) and set the following **new** values for Elasticsearch authentication:
+
+- **APP_VECTORSTORE_USERNAME:** set to `"elastic"` (the default Elasticsearch superuser).
+- **APP_VECTORSTORE_PASSWORD:** set to the password you retrieved in step 4 (i.e. the value of `$ES_PASSWORD`, or paste the output of the `kubectl get secret ... -o jsonpath='{.data.elastic}' | base64 -d` command).
+
+Example (replace `your-retrieved-password` with your actual `$ES_PASSWORD`):
+
+```yaml
+# RAG Server configuration
+envVars:
+  APP_VECTORSTORE_URL: "http://rag-eck-elasticsearch-es-http:9200"
+  APP_VECTORSTORE_NAME: "elasticsearch"
+  APP_VECTORSTORE_USERNAME: "elastic"
+  APP_VECTORSTORE_PASSWORD: "your-retrieved-password"   # use $ES_PASSWORD from step 3
+
+# Ingestor Server configuration
+ingestor-server:
+  envVars:
+    APP_VECTORSTORE_URL: "http://rag-eck-elasticsearch-es-http:9200"
+    APP_VECTORSTORE_NAME: "elasticsearch"
+    APP_VECTORSTORE_USERNAME: "elastic"
+    APP_VECTORSTORE_PASSWORD: "your-retrieved-password"   # use $ES_PASSWORD from step 3
+```
+
+Then apply the changes as described in [Change a Deployment](deploy-helm.md#change-a-deployment).
+
+#### 5. (Optional) Use API Key Authentication
+
+For advanced use cases or production environments, you can use Elasticsearch API keys instead of username/password authentication.
+
+**Generate an API Key:**
+
+First, port-forward to access Elasticsearch:
+
+```bash
+kubectl port-forward -n rag svc/rag-eck-elasticsearch-es-http 9200:9200
+```
+
+Then generate an API key using the elastic user:
+
+```bash
+# Get the elastic password
+ES_PASSWORD=$(kubectl get secret rag-eck-elasticsearch-es-elastic-user -n rag -o jsonpath='{.data.elastic}' | base64 -d)
+
+# Create an API key
+curl -u elastic:$ES_PASSWORD \
+  -X POST "http://localhost:9200/_security/api_key" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "rag-api-key",
+    "role_descriptors": {}
+  }'
+```
+
+Example response:
+```json
+{
+  "id": "AbCdEfGhIj",
+  "name": "rag-api-key",
+  "api_key": "ZyXwVuTsRq"
+}
+```
+
+**Encode the API Key:**
+
+```bash
+# Base64 encode the "id:api_key" format
+echo -n "AbCdEfGhIj:ZyXwVuTsRq" | base64
+# Output example: QWJDZEVmR2hJajpaeVh3VnVUc1Jx
+```
+
+**Configure with API Key:**
+
+Edit [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml):
+
+```yaml
+# RAG Server configuration - Option 1: Base64 encoded API key
+envVars:
+  APP_VECTORSTORE_APIKEY: "QWJDZEVmR2hJajpaeVh3VnVUc1Jx"
+  # Leave username/password empty
+  APP_VECTORSTORE_USERNAME: ""
+  APP_VECTORSTORE_PASSWORD: ""
+
+# Ingestor Server configuration - Option 1: Base64 encoded API key
+ingestor-server:
+  envVars:
+    APP_VECTORSTORE_APIKEY: "QWJDZEVmR2hJajpaeVh3VnVUc1Jx"
+    APP_VECTORSTORE_USERNAME: ""
+    APP_VECTORSTORE_PASSWORD: ""
+```
+
+Or use split ID/SECRET format:
+
+```yaml
+# RAG Server configuration - Option 2: Split ID and secret
+envVars:
+  APP_VECTORSTORE_APIKEY_ID: "AbCdEfGhIj"
+  APP_VECTORSTORE_APIKEY_SECRET: "ZyXwVuTsRq"
+  APP_VECTORSTORE_USERNAME: ""
+  APP_VECTORSTORE_PASSWORD: ""
+
+# Ingestor Server configuration - Option 2: Split ID and secret
+ingestor-server:
+  envVars:
+    APP_VECTORSTORE_APIKEY_ID: "AbCdEfGhIj"
+    APP_VECTORSTORE_APIKEY_SECRET: "ZyXwVuTsRq"
+    APP_VECTORSTORE_USERNAME: ""
+    APP_VECTORSTORE_PASSWORD: ""
+```
+
+Then apply the changes as described in [Change a Deployment](deploy-helm.md#change-a-deployment).
+
+:::{note}
+**API Key vs Username/Password:**
+- API keys are recommended for production environments and applications
+- API keys can have specific permissions and expiration dates
+- API keys can be rotated without changing the elastic user password
+- **API key authentication takes precedence** when both username/password and API keys are configured
+:::
+
+#### 6. Verify Authentication
+
+Test that the services can connect to Elasticsearch with authentication:
+
+```bash
+# Check ingestor-server logs for successful connection
+kubectl logs -n rag -l app=ingestor-server --tail=20
+
+# Test Elasticsearch connection manually
+ES_PASSWORD=$(kubectl get secret rag-eck-elasticsearch-es-elastic-user -n rag -o jsonpath='{.data.elastic}' | base64 -d)
+kubectl exec -n rag rag-eck-elasticsearch-es-default-0 -- curl -s -u elastic:$ES_PASSWORD http://localhost:9200/_cluster/health
+```
+
+
+## Using VDB Auth Token at Runtime via APIs (Enterprise Feature)
+
+When using Elasticsearch as the vector database, you can pass a per-request VDB authentication token via the HTTP `Authorization` header. The servers forward this token to Elasticsearch for that request. This enables per-user authentication or per-request scoping without changing server env configuration.
+
+Prerequisite:
+- Ensure Elasticsearch authentication is enabled so security is enforced. In Elasticsearch this typically requires `xpack.security.enabled=true`. See the [Elasticsearch Authentication](#elasticsearch-authentication) section above for enabling security via Docker Compose or Helm and for obtaining API keys or setting credentials.
+
+### Set Up Runtime Token and Endpoints
+
+Before making API requests with authentication, export the required environment variables.
+
+**1. Export service endpoints:**
+
+```bash
+export INGESTOR_URL="http://localhost:8082"
+export RAG_URL="http://localhost:8081"
+```
+
+**2. Export authentication token:**
+
+Runtime authentication via the `Authorization` header only supports Elasticsearch API keys. Export your API key token:
+
+```bash
+# Export your bearer token
+export ES_VDB_TOKEN="your-bearer-token"
+```
+
+:::{note}
+Bearer token authentication (OAuth/OIDC/SAML) is an enterprise support feature and not available in the free version of Elasticsearch. For most use cases, use Elasticsearch API keys as shown in [Generate Elasticsearch API Key](#3-generate-elasticsearch-api-key-optional-but-recommended) above.
+:::
+
+### Header format
+
+Use bearer authentication in your API requests:
+
+```
+Authorization: Bearer <token>
+```
+
+### Ingestor Server examples
+
+- List documents:
+
+```bash
+curl -G "$INGESTOR_URL/v1/documents" \
+  -H "Authorization: Bearer ${ES_VDB_TOKEN}" \
+  --data-urlencode "collection_name=es_demo_collection"
+```
+
+- Delete a collection:
+
+```bash
+curl -X DELETE "$INGESTOR_URL/v1/collections" \
+  -H "Authorization: Bearer ${ES_VDB_TOKEN}" \
+  --data-urlencode "collection_names=es_demo_collection"
+```
+
+:::{note}
+You can also set `vdb_endpoint` in your request payload to override the configured `APP_VECTORSTORE_URL`.
+:::
+
+### RAG Server examples
+
+- Search:
+
+```bash
+curl -X POST "$RAG_URL/v1/search" \
+  -H "Authorization: Bearer ${ES_VDB_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "what is vector search?",
+    "use_knowledge_base": true,
+    "collection_names": ["es_demo_collection"],
+    "vdb_endpoint": "'"$APP_VECTORSTORE_URL"'",
+    "reranker_top_k": 0,
+    "vdb_top_k": 3
+  }'
+```
+
+- Generate with streaming:
+
+```bash
+curl -N -X POST "$RAG_URL/v1/generate" \
+  -H "Authorization: Bearer ${ES_VDB_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role":"user","content":"Give a short summary of vector databases"}],
+    "use_knowledge_base": true,
+    "collection_names": ["es_demo_collection"],
+    "vdb_endpoint": "'"$APP_VECTORSTORE_URL"'",
+    "reranker_top_k": 0,
+    "vdb_top_k": 3
+  }'
+```
+
+### Troubleshooting
+- If you receive authentication/authorization errors from Elasticsearch, verify your token (API key validity, scopes, and expiration).
+- Ensure the server is not also configured with conflicting credentials for the same request.
+- Confirm that `APP_VECTORSTORE_NAME=elasticsearch` and `APP_VECTORSTORE_URL` are set correctly.
+
+# Define Your Own Vector Database
+
+You can create your own custom vector database operators by implementing the `VDBRag` base class.
+This enables you to integrate with any vector database that isn't already supported.
+
+:::{caution}
+This section is for advanced developers who need to integrate custom vector databases beyond the supported database options.
+:::
+
+For a complete example, refer to [Custom VDB Operator Notebook](https://github.com/NVIDIA-AI-Blueprints/rag/blob/main/notebooks/building_rag_vdb_operator.ipynb).
+
+:::{tip}
+Choose your integration path:
+- Start with Library Mode for fastest iteration during development (recommended for most users).
+- Advanced users who are comfortable with deployments can start directly with Server Mode. See: [Integrate Into NVIDIA RAG (Server Mode)](#integrate-custom-vector-database-into-nvidia-rag-servers-docker-mode).
+:::
+
+
+## Integrate Custom VDB in Library Mode (Developer-Friendly Approach)
+
+Before wiring your custom VDB into the servers, the quickest way to iterate is to run it in library mode. This is ideal for development, debugging, and ensuring the operator behaves correctly.
+
+:::{tip}
+New to library mode? Check out the [Containerless Deployment (Lite Mode)](https://github.com/NVIDIA-AI-Blueprints/rag/blob/main/notebooks/rag_library_lite_usage.ipynb) notebook for a complete example of using the RAG library without Docker containers.
+:::
+
+- Reference implementation (start here)
+  - Read the notebook: `../notebooks/building_rag_vdb_operator.ipynb`.
+  - It contains a complete, working example you can copy and adapt.
+
+- What you build
+  - A class that inherits from `VDBRag` and implements the required methods for ingestion and retrieval.
+  - Instantiate that class and pass it to `NvidiaRAG` and/or `NvidiaRAGIngestor` via the `vdb_op` parameter.
+
+- Minimal example
+  ```python
+  from nvidia_rag import NvidiaRAG, NvidiaRAGIngestor
+  from nvidia_rag.utils.vdb.vdb_base import VDBRag
+
+  class CustomVDB(VDBRag):
+      def __init__(self, custom_url: str, index_name: str, embedding_model=None):
+          # initialize client(s) here
+          self.url = custom_url
+          self.index_name = index_name
+          self.embedding_model = embedding_model
+
+      def create_collection(self, collection_name: str, dimension: int = 2048, collection_type: str = "text"):
+          ...  # create index/collection
+
+      def write_to_index(self, records: list[dict], **kwargs):
+          ...  # bulk insert vectors + metadata
+
+      # implement retrieval and other required methods used by the notebook
+
+  custom_vdb_op = CustomVDB(custom_url="http://localhost:9200", index_name="test_library")
+  rag = NvidiaRAG(vdb_op=custom_vdb_op)
+  ingestor = NvidiaRAGIngestor(vdb_op=custom_vdb_op)
+  ```
+
+- Quick checklist:
+  - Implement a `VDBRag` subclass with at least: `create_collection`, `write_to_index`, and retrieval helpers used in the notebook.
+  - Initialize your operator and pass it via `vdb_op` to `NvidiaRAG`/`NvidiaRAGIngestor`.
+  - Run the notebook cells to validate: create collection → upload documents → search/generate → list/delete documents.
+  - Once satisfied, proceed to Server Mode integration below.
+
+## Step-by-Step Implementation Guide for Custom Vector Database
+
+Use the following steps to create and use your own custom database operators.
+
+1. Create a class that inherits from `VDBRag` and implements all required methods.
+
+   ```python
+   from nvidia_rag.utils.vdb.vdb_base import VDBRag
+
+   class CustomVDB(VDBRag):
+       def __init__(self, custom_url, index_name, embedding_model=None):
+           # Initialize your custom VDB connection
+           pass
+
+       def create_collection(self, collection_name, dimension=2048):
+           # Implement collection creation
+           pass
+
+       def write_to_index(self, records, **kwargs):
+           # Implement document indexing
+           pass
+
+       # Implement other required methods...
+   ```
+
+2. Use your custom operator with NVIDIA RAG components.
+
+   ```python
+   # Initialize custom VDB operator
+   custom_vdb_op = CustomVDB(
+       custom_url="your://database:url",
+       index_name="collection_name",
+       embedding_model=embedding_model
+   )
+
+   # Use with NVIDIA RAG
+   rag = NvidiaRAG(vdb_op=custom_vdb_op)
+   ingestor = NvidiaRAGIngestor(vdb_op=custom_vdb_op)
+   ```
+
+    #### Method Descriptions:
+
+    Use this as a minimal checklist for your `VDBRag` subclass. Keep names consistent with your codebase; ensure these behaviors exist.
+
+    - Initialization
+      - `__init__(...)`: Initialize your backend client/connection, set collection/index name, capture metadata helpers, and optionally accept an embedding model handle.
+      - `collection_name (property)`: Getter/Setter mapping to your underlying collection/index identifier.
+
+    - Core index operations
+      - `_check_index_exists(name)`: Return whether the target collection/index exists.
+      - `create_index()`: Create the collection/index if missing with appropriate vector settings.
+      - `write_to_index(records, **kwargs)`: Clean incoming records, extract `text`, `vector`, and metadata (e.g., `source`, `content_metadata`), bulk-insert, and refresh visibility.
+      - `retrieval(queries, **kwargs)`: Optional for RAG. Implement multi-query retrieval or raise `NotImplementedError` if you expose a different retrieval entrypoint.
+      - `reindex(records, **kwargs)`: Optional for RAG. Implement reindex/update workflows or raise `NotImplementedError`.
+      - `run(records)`: Convenience helper to create (if needed) then write.
+
+    - Collection management
+      - `create_collection(collection_name, dimension=2048, collection_type="text")`: Ensure a collection exists and is ready for inserts/queries.
+      - `check_collection_exists(collection_name)`: Boolean existence check.
+      - `get_collection()`: Return a list of collections with document counts, stored metadata schema, and collection-level document info.
+      - `delete_collections(collection_names)`: Delete specified collections and clean up stored schemas and document info.
+
+    - Document management
+      - `get_documents(collection_name)`: Return unique documents (commonly grouped by a `source` field) with schema-aligned metadata values and document info.
+      - `delete_documents(collection_name, source_values)`: Bulk-delete documents matching provided sources; refresh visibility and clean up associated document info.
+
+    - Metadata schema management
+      - `create_metadata_schema_collection()`: Initialize storage for metadata schemas if missing.
+      - `add_metadata_schema(collection_name, metadata_schema)`: Replace the stored schema for a collection.
+      - `get_metadata_schema(collection_name)`: Fetch the stored schema; return an empty list if none.
+
+    - Document info management (implementation of these methods is optional)
+      - `create_document_info_collection()`: Initialize storage for document-level and collection-level information.
+      - `add_document_info(info_type, collection_name, document_name, info_value)`: Store document or collection info (e.g., processing statistics, custom metadata).
+      - `get_document_info(info_type, collection_name, document_name)`: Retrieve stored document/collection info; return an empty dict if none.
+
+    - Catalog metadata management (implementation of these methods is optional)
+      - `get_catalog_metadata(collection_name)`: Retrieve catalog metadata (description, tags, owner, etc.) for a collection.
+      - `update_catalog_metadata(collection_name, updates)`: Update catalog metadata for a collection with merge semantics.
+      - `get_document_catalog_metadata(collection_name, document_name)`: Retrieve catalog metadata (description, tags) for a specific document.
+      - `update_document_catalog_metadata(collection_name, document_name, updates)`: Update catalog metadata for a specific document.
+
+    - Retrieval helpers
+      - Retrieval helper (e.g., `retrieval_*`): Return top‑k relevant documents using your backend's semantic search. Support optional filters and tracing where applicable.
+      - Vector index handle (e.g., `get_*_vectorstore`): Return a handle to your backend's vector index suitable for retrieval operations.
+      - Add collection tag (e.g., `_add_collection_name_to_*docs`): Add the originating collection name into each document's metadata (useful for multi‑collection citations).
+
+    For a concrete, working example, see `src/nvidia_rag/utils/vdb/elasticsearch/elastic_vdb.py` and `notebooks/building_rag_vdb_operator.ipynb`.
+
+## Integrate Custom Vector Database Into NVIDIA RAG Servers (Docker Mode)
+
+Before proceeding in server mode, go through the Implementation Steps above to implement and validate your operator.
+
+Follow these steps to add your custom vector database to the NVIDIA RAG servers (RAG server and Ingestor server).
+
+- Reference implementation (read this first)
+  - We strongly recommend reviewing the companion notebook: `../notebooks/building_rag_vdb_operator.ipynb`.
+  - It contains a complete, working custom VDB example that you can adapt. The server-mode integration below reuses the same class and only adds a small registration step plus environment configuration.
+
+- 1) Add your implementation
+  - Create your operator under the project tree:
+    ```
+    src/nvidia_rag/utils/vdb/custom_vdb_name/custom_vdb_name.py
+    ```
+  - Implement the class that inherits from `VDBRag` and fulfills the required methods (create collection, write, search, etc.).
+
+- 2) Register your operator in the server
+  - Update the VDB factory so the servers can instantiate your operator by name. Edit `src/nvidia_rag/utils/vdb/__init__.py` and add a branch inside `_get_vdb_op`:
+    ```python
+    elif CONFIG.vector_store.name == "your_custom_vdb":
+        from nvidia_rag.utils.vdb.custom_vdb_name.custom_vdb_name import CustomVDB
+        return CustomVDB(
+            index_name=collection_name,
+            custom_url=vdb_endpoint or CONFIG.vector_store.url,
+            embedding_model=embedding_model,
+        )
+    ```
+
+
+
+- 3) Add required client libraries (if needed)
+  - If your custom operator depends on an external client SDK, add the library to `pyproject.toml` under `[project].dependencies` so it is installed consistently across local runs, CI, and Docker builds. Example:
+    ```toml
+    [project]
+    dependencies = [
+        # ...
+        "opensearch-py>=3.0.0", # or your custom client library
+    ]
+    ```
+  - Rebuild your images if deploying with Docker so the new dependency is included.
+
+
+- 4) Configure docker compose (server deployments)
+  - Set `APP_VECTORSTORE_NAME` to your custom name and point `APP_VECTORSTORE_URL` to your service in both compose files:
+    - `deploy/compose/docker-compose-rag-server.yaml`
+    - `deploy/compose/docker-compose-ingestor-server.yaml`
+
+    Example overrides via environment (recommended):
+    ```bash
+    export APP_VECTORSTORE_NAME="your_custom_vdb"
+    export APP_VECTORSTORE_URL="http://your-custom-vdb:1234"
+    # Build the containers to include your current codebase
+    docker compose -f deploy/compose/docker-compose-rag-server.yaml up -d --build
+    docker compose -f deploy/compose/docker-compose-ingestor-server.yaml up -d --build
+    ```
+
+    Or, you may edit the files locally to show your custom value. Search for `APP_VECTORSTORE_NAME` and adjust defaults if desired:
+    ```yaml
+    # Type of vectordb used to store embedding (supports "milvus", "elasticsearch", or a custom value like "your_custom_vdb")
+    APP_VECTORSTORE_NAME: ${APP_VECTORSTORE_NAME:-"milvus"}
+    # URL on which vectorstore is hosted
+    APP_VECTORSTORE_URL: ${APP_VECTORSTORE_URL:-http://your-custom-vdb:1234}
+    ```
+
+- 5) How the configuration is picked up
+  - The application configuration (`src/nvidia_rag/utils/configuration.py`) maps environment variables into the `AppConfig` object. Specifically:
+    - `APP_VECTORSTORE_NAME` → `CONFIG.vector_store.name`
+    - `APP_VECTORSTORE_URL` → `CONFIG.vector_store.url`
+  - The server calls the VDB factory with this configuration. See `_get_vdb_op`:
+    - When `CONFIG.vector_store.name == "your_custom_vdb"`, the branch you added is executed and your operator is constructed with `CONFIG.vector_store.url` (or the request override) and the embedding model.
+
+- TL;DR
+  - Create a `VDBRag` subclass in `src/nvidia_rag/utils/vdb/<your_name>/<your_name>.py` (mirror the notebook example).
+  - Add a new `elif CONFIG.vector_store.name == "your_custom_vdb"` branch in `src/nvidia_rag/utils/vdb/__init__.py::_get_vdb_op` that instantiates your class.
+  - Set env vars for both servers: `APP_VECTORSTORE_NAME=your_custom_vdb`, `APP_VECTORSTORE_URL=http://your-custom-vdb:1234`.
+  - Restart `docker-compose` services for the RAG server and Ingestor server.
+
+That’s it—after these steps, both the RAG server and the Ingestor will use your custom vector database when `APP_VECTORSTORE_NAME` is set to `your_custom_vdb`.
+
+## Integrate Custom Vector Database Into NVIDIA RAG Servers (Helm/Kubernetes Mode)
+
+:::{warning}
+**Advanced Developer Guide - Production Use Only**
+
+This section is for **advanced developers** with Kubernetes and Helm experience. Recommended for production environments only. For development and testing, use the [Docker Compose approach](#integrate-custom-vector-database-into-nvidia-rag-servers-docker-mode) instead.
+:::
+
+Before proceeding with Helm deployment, ensure you have completed the implementation steps mentioned above, including:
+
+- Creating your custom VDB operator class that inherits from `VDBRag`
+- Registering your operator in `src/nvidia_rag/utils/vdb/__init__.py`
+- Adding required client libraries to `pyproject.toml` (if needed)
+
+Refer to the steps above for detailed implementation guidance.
+
+### Build Custom Images
+
+Once your custom vector database implementation is complete, you need to build custom images for both the RAG server and Ingestor server:
+
+1. **Update image names in Docker Compose files:**
+
+   Edit `deploy/compose/docker-compose-rag-server.yaml` and change the image name:
+   ```yaml
+   services:
+     rag-server:
+       image: your-registry/your-rag-server:your-tag
+   ```
+
+   Edit `deploy/compose/docker-compose-ingestor-server.yaml` and change the image name:
+   ```yaml
+   services:
+     ingestor-server:
+       image: your-registry/your-ingestor-server:your-tag
+   ```
+
+   :::{tip}
+   Use a public registry for easier deployment and accessibility.
+   :::
+
+2. **Build Ingestor server and RAG server image:**
+   ```bash
+   docker compose -f deploy/compose/docker-compose-ingestor-server.yaml build
+   docker compose -f deploy/compose/docker-compose-rag-server.yaml build
+   ```
+
+3. **Push images to your registry:**
+   ```bash
+   docker push your-registry/your-rag-server:your-tag
+   docker push your-registry/your-ingestor-server:your-tag
+   ```
+
+### Configure Helm Values
+
+Update your [`values.yaml`](../deploy/helm/nvidia-blueprint-rag/values.yaml) file to use your custom images and configure your vector database:
+
+1. **Update image repositories and tags:**
+   ```yaml
+   # RAG server image configuration
+   image:
+     repository: your-registry/your-rag-server
+     tag: "your-tag"
+     pullPolicy: Always
+
+   # Ingestor server image configuration
+   ingestor-server:
+     image:
+       repository: your-registry/your-ingestor-server
+       tag: "your-tag"
+       pullPolicy: Always
+   ```
+
+2. **Configure vector database settings:**
+   ```yaml
+   # RAG server environment variables
+   envVars:
+     APP_VECTORSTORE_URL: "http://your-custom-vdb:port"
+     APP_VECTORSTORE_NAME: "your_custom_vdb"
+     # ... other existing configurations
+
+   # Ingestor server environment variables
+   ingestor-server:
+     envVars:
+       APP_VECTORSTORE_URL: "http://your-custom-vdb:port"
+       APP_VECTORSTORE_NAME: "your_custom_vdb"
+       # ... other existing configurations
+   ```
+
+### Disable Default Vector Database and Add Custom Helm Chart
+
+1. **Disable Milvus in the NeMo Retriever Library configuration:**
+   ```yaml
+   nv-ingest:
+     enabled: true
+     # Disable Milvus deployment
+     milvusDeployed: false
+     milvus:
+       enabled: false
+   ```
+
+2. **Add your custom vector database Helm chart to `Chart.yaml`:**
+
+   Edit `deploy/helm/nvidia-blueprint-rag/Chart.yaml` and add your custom VDB as a dependency:
+   ```yaml
+   dependencies:
+   # ... existing dependencies
+   - condition: your-custom-vdb.enabled
+     name: your-custom-vdb
+     repository: https://your-helm-repo.com/charts
+     version: 1.0.0
+   ```
+
+   :::{note}
+   Replace `your-custom-vdb`, `https://your-helm-repo.com/charts`, and `1.0.0` with your actual chart name, repository URL, and version.
+   :::
+
+3. **Add Helm repository and update dependencies:**
+   ```bash
+   cd deploy/helm/
+
+   # Add your custom VDB Helm repository
+   helm repo add your-vdb-repo https://your-helm-repo.com/charts
+   helm repo update
+
+   # Update Helm dependencies
+   helm dependency update nvidia-blueprint-rag
+   ```
+
+4. **Enable your custom vector database in `values.yaml`:**
+   ```yaml
+   # Add your custom VDB configuration
+   your-custom-vdb:
+     enabled: true
+     # Add your VDB-specific configuration here
+     # Example configurations:
+     service:
+       type: ClusterIP
+       port: 9200
+     resources:
+       limits:
+         memory: "4Gi"
+       requests:
+         memory: "2Gi"
+   ```
+
+### Deploy with Helm
+
+Deploy your updated NVIDIA RAG system with the custom vector database:
+
+```bash
+cd deploy/helm/
+
+helm upgrade --install rag -n rag nvidia-blueprint-rag/ \
+--set imagePullSecret.password=$NGC_API_KEY \
+--set ngcApiSecret.password=$NGC_API_KEY \
+-f nvidia-blueprint-rag/values.yaml
+```
+
+### Verify Deployment
+
+After deployment, verify that your custom vector database is working correctly:
+
+1. **Check pod status:**
+   ```bash
+   kubectl get pods -n rag
+   ```
+
+2. **Check service endpoints:**
+   ```bash
+   kubectl get services -n rag
+   ```
+
+3. **Test vector database connectivity:**
+   ```bash
+   # Get your custom VDB pod name:
+   kubectl get pods -n rag
+   
+   # Then run the health check (replace <custom-vdb-pod-name> with your pod name and correct /health endpoint):
+   kubectl exec -n rag <custom-vdb-pod-name> -- curl -X GET "localhost:port/health"
+   ```
+
+4. **Access the RAG UI:**
+
+   1. Port-forward the RAG UI service:
+      ```bash
+      kubectl port-forward -n rag service/rag-frontend 3000:3000 --address 0.0.0.0
+      ```
+
+   2. Access the UI at `http://<host-ip>:3000` and configure:
+      - Go to Settings > Endpoint Configuration > Vector Database Endpoint and set it to `http://your-custom-vdb:port`
+
+### Troubleshooting
+
+If you encounter issues during deployment:
+
+1. **Check Helm chart dependencies:**
+   ```bash
+   helm dependency list nvidia-blueprint-rag
+   ```
+
+2. **Verify image pull secrets:**
+   ```bash
+   kubectl get secrets -n rag
+   ```
+
+3. **Check pod logs:**
+   ```bash
+   kubectl logs -n rag deployment/rag-server
+   kubectl logs -n rag deployment/ingestor-server
+   ```
+
+4. **Validate Helm values:**
+   ```bash
+   helm template rag nvidia-blueprint-rag/ -f nvidia-blueprint-rag/values.yaml
+   ```
+
+## Implement Retrieval-Only Vector Database Integration
+
+You can integrate your own vector database with NVIDIA RAG by implementing only the retrieval functionality while managing ingestion separately. This approach allows you to use existing RAG server, [RAG UI](user-interface.md), and ingestor server components with your custom vector database backend.
+
+:::{note}
+This approach is ideal when you have an existing vector database with pre-indexed documents and want to leverage NVIDIA RAG's retrieval and generation capabilities without implementing full ingestion workflows into Nvidia RAG Blueprint.
+:::
+
+## Implementation Requirements
+
+Implement only the retrieval-focused methods from the `VDBRag` interface:
+
+**Required Methods:**
+- `__init__(vdb_endpoint, collection_name, embedding_model=None)`: Initialize connection
+- `close()`: Clean up connections
+- `__enter__()` / `__exit__()`: Context manager support
+- `check_health()`: Return database health status
+- `get_collection()`: Return available collections with metadata
+- `check_collection_exists(collection_name)`: Verify collection existence
+- `retrieval_langchain(query, collection_name, vectorstore=None, top_k=10, filter_expr="", otel_ctx=None)`: **Core retrieval method** - Must return `langchain_core.documents.Document` objects with:
+  - `page_content`: The document text content
+  - `metadata`: Dictionary containing:
+    - `source`: Document source identifier (e.g., "file1.pdf")
+    - `content_metadata`: Nested dictionary with additional metadata (e.g., `{"topic": "science"}`)
+    - `collection_name`: To be added in each Document's metadata
+- `get_langchain_vectorstore(collection_name)`: Return vectorstore handle (can return `None`)
+
+**Optional Methods:** Raise `NotImplementedError` for all ingestion methods (`create_collection()`, `write_to_index()`, etc.) and document info management methods (`create_document_info_collection()`, `add_document_info()`, `get_document_info()`)
+
+**Example Document Structure:**
+```python
+from langchain_core.documents import Document
+
+# Example return from retrieval_langchain()
+documents = [
+    Document(
+        page_content="Albert Einstein was playing chess with his friend",
+        metadata={
+            "source": "file1.pdf",
+            "content_metadata": {"topic": "science"},
+            "collection_name": "my_collection"
+        }
+    )
+]
+```
+
+## Integration Steps
+
+Follow the steps in [## Integrate Into NVIDIA RAG (Server Mode - Docker)](#integrate-custom-vector-database-into-nvidia-rag-servers-docker-mode) with these key differences:
+
+1. **Skip ingestion implementations** - Raise `NotImplementedError` for ingestion methods
+2. **Handle document indexing separately** - Use your own processes or tools
+3. **Ensure proper document format** - Your `retrieval_langchain` method must return `Document` objects with metadata
+
+The integration process remains the same: create your VDB class, register it, configure environment variables, and deploy.
+
+
+
+## Related Topics
+
+- [NVIDIA RAG Blueprint Documentation](readme.md)
+- [Best Practices for Common Settings](accuracy_perf.md).
+- [RAG Pipeline Debugging Guide](debugging.md)
+- [Troubleshoot](troubleshooting.md)
+- [Notebooks](notebooks.md)
