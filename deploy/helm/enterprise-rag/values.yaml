@@ -1,0 +1,249 @@
+# Default values for enterprise-rag.
+# Profile-specific overrides live in values-l40s.yaml / values-h100.yaml /
+# values-cpu-dev.yaml — pass with `helm install ... -f values-<profile>.yaml`.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------------------
+# GPU / runtime
+# ---------------------------------------------------------------------------
+gpuOperator:
+  # runtimeClassName works with the NVIDIA GPU Operator (default "nvidia").
+  # If you're using only the NVIDIA k8s device plugin (no Operator), set this
+  # to "" — the device plugin alone schedules GPUs via nvidia.com/gpu requests.
+  runtimeClassName: nvidia
+
+# ---------------------------------------------------------------------------
+# Secrets
+# ---------------------------------------------------------------------------
+# Two modes:
+#   1) inline (dev): set values directly, chart renders a Secret object.
+#   2) external (prod): set existingSecret to the name of a pre-created Secret
+#      with the same keys; the chart will reference it instead.
+secrets:
+  existingSecret: ""
+  hfToken: ""
+  apiKeys: ""           # comma-separated, e.g. "sk-alice-abc,sk-bob-def"
+  openaiApiKey: ""
+  anthropicApiKey: ""   # accepted but unused by current code
+  openrouterApiKey: ""  # accepted but unused by current code
+
+# ---------------------------------------------------------------------------
+# Non-secret env (rendered into ConfigMap, mounted as envFrom)
+# ---------------------------------------------------------------------------
+config:
+  QDRANT_URL: "http://{{ include \"enterprise-rag.fullname\" . }}-qdrant:6333"
+  QDRANT_COLLECTION: "documents"
+  VLLM_GEN_URL: "http://{{ include \"enterprise-rag.fullname\" . }}-vllm-gen:8000/v1"
+  VLLM_GEN_MODEL: "neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8-dynamic"
+  VLLM_GUARD_URL: "http://{{ include \"enterprise-rag.fullname\" . }}-vllm-guard:8000/v1"
+  VLLM_GUARD_MODEL: "meta-llama/Llama-Guard-3-8B"
+  EMBEDDING_MODEL: "BAAI/bge-m3"
+  RERANKER_MODEL: "BAAI/bge-reranker-v2-m3"
+  EMBEDDER_DEVICE: "cuda"
+  RETRIEVAL_MODE: "hybrid"
+  SAFETY_OPENAI_MODERATION: "true"
+  SAFETY_LLAMAGUARD: "true"
+  SAFETY_CONSTITUTIONAL: "true"
+  TOP_K_RETRIEVE: "20"
+  TOP_K_RERANK: "5"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  RATE_LIMIT_PER_MIN: "60"
+  RATE_LIMIT_BURST: "10"
+
+# ---------------------------------------------------------------------------
+# API (FastAPI gateway)
+# ---------------------------------------------------------------------------
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: rag-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+      nvidia.com/gpu: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 5
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  host: rag.example.com
+  path: /
+  pathType: Prefix
+  tls:
+    enabled: false
+    secretName: ""
+
+# ---------------------------------------------------------------------------
+# vLLM generator
+# ---------------------------------------------------------------------------
+vllmGen:
+  enabled: true
+  image:
+    repository: vllm/vllm-openai
+    tag: v0.6.6
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  # vLLM CLI args (rendered as the container command).
+  args:
+    - "--model=neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8-dynamic"
+    - "--kv-cache-dtype=fp8"
+    - "--enable-prefix-caching"
+    - "--max-model-len=4096"
+    - "--gpu-memory-utilization=0.80"
+    - "--speculative-model=meta-llama/Llama-3.2-1B-Instruct"
+    - "--num-speculative-tokens=5"
+    - "--port=8000"
+  resources:
+    requests:
+      cpu: "2"
+      memory: "16Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "8"
+      memory: "48Gi"
+      nvidia.com/gpu: 1
+  shmSizeGi: 8           # vLLM prefers a large /dev/shm (compose used ipc:host)
+  hfCache:
+    # Mount an emptyDir or PVC for HuggingFace model cache. PVC strongly
+    # recommended in prod so model weights survive Pod restarts.
+    enabled: true
+    persistence:
+      enabled: false
+      size: 100Gi
+      storageClass: ""
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# vLLM guard (LlamaGuard 3 8B)
+# ---------------------------------------------------------------------------
+vllmGuard:
+  enabled: true
+  image:
+    repository: vllm/vllm-openai
+    tag: v0.6.6
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  args:
+    - "--model=meta-llama/Llama-Guard-3-8B"
+    - "--kv-cache-dtype=fp8"
+    - "--enable-prefix-caching"
+    - "--max-model-len=2048"
+    - "--gpu-memory-utilization=0.55"
+    - "--port=8000"
+  resources:
+    requests:
+      cpu: "2"
+      memory: "16Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "8"
+      memory: "32Gi"
+      nvidia.com/gpu: 1
+  shmSizeGi: 8
+  hfCache:
+    enabled: true
+    persistence:
+      enabled: false
+      size: 50Gi
+      storageClass: ""
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Qdrant vector DB
+# ---------------------------------------------------------------------------
+qdrant:
+  enabled: true
+  image:
+    repository: qdrant/qdrant
+    tag: v1.12.4
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    httpPort: 6333
+    grpcPort: 6334
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Ollama (CPU-dev profile only — disabled by default)
+# ---------------------------------------------------------------------------
+ollama:
+  enabled: false
+  image:
+    repository: ollama/ollama
+    tag: "0.3.14"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 11434
+  model: "llama3.1:8b-instruct-q4_K_M"
+  resources:
+    requests:
+      cpu: "2"
+      memory: "8Gi"
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+  persistence:
+    enabled: false
+    size: 20Gi
+    storageClass: ""

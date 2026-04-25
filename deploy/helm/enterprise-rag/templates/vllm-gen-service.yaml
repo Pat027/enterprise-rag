@@ -1,0 +1,17 @@
+{{- if .Values.vllmGen.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "enterprise-rag.fullname" . }}-vllm-gen
+  labels:
+    {{- include "enterprise-rag.componentLabels" (dict "ctx" . "component" "vllm-gen") | nindent 4 }}
+spec:
+  type: {{ .Values.vllmGen.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.vllmGen.service.port }}
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    {{- include "enterprise-rag.selectorLabels" (dict "ctx" . "component" "vllm-gen") | nindent 4 }}
+{{- end }}

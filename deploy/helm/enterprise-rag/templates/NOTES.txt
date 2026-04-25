@@ -1,0 +1,37 @@
+enterprise-rag has been installed into namespace "{{ .Release.Namespace }}"
+as release "{{ .Release.Name }}".
+
+Components deployed:
+{{- if .Values.api.enabled }}
+  - api          (FastAPI gateway)         Service: {{ include "enterprise-rag.fullname" . }}-api:{{ .Values.api.service.port }}
+{{- end }}
+{{- if .Values.qdrant.enabled }}
+  - qdrant       (vector store)            Service: {{ include "enterprise-rag.fullname" . }}-qdrant:{{ .Values.qdrant.service.httpPort }}
+{{- end }}
+{{- if .Values.vllmGen.enabled }}
+  - vllm-gen     (generator LLM)           Service: {{ include "enterprise-rag.fullname" . }}-vllm-gen:{{ .Values.vllmGen.service.port }}
+{{- end }}
+{{- if .Values.vllmGuard.enabled }}
+  - vllm-guard   (LlamaGuard safety LLM)   Service: {{ include "enterprise-rag.fullname" . }}-vllm-guard:{{ .Values.vllmGuard.service.port }}
+{{- end }}
+{{- if .Values.ollama.enabled }}
+  - ollama       (CPU-dev fallback LLM)    Service: {{ include "enterprise-rag.fullname" . }}-ollama:{{ .Values.ollama.service.port }}
+
+  WARNING: this profile disables LlamaGuard + constitutional safety. It is
+  for development only and is NOT a real safety stack.
+{{- end }}
+
+Reach the API:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "enterprise-rag.fullname" . }}-api {{ .Values.api.service.port }}:{{ .Values.api.service.port }}
+  curl http://localhost:{{ .Values.api.service.port }}/health
+
+{{- if .Values.ingress.enabled }}
+
+Or via ingress: http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}{{ .Values.ingress.path }}
+{{- end }}
+
+vLLM Pods take 2-5 minutes to download model weights and warm up the engine
+on first launch. Check progress with:
+
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/component=vllm-gen -f

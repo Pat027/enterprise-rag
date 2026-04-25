@@ -1,0 +1,104 @@
+{{- if .Values.vllmGuard.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterprise-rag.fullname" . }}-vllm-guard
+  labels:
+    {{- include "enterprise-rag.componentLabels" (dict "ctx" . "component" "vllm-guard") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "enterprise-rag.selectorLabels" (dict "ctx" . "component" "vllm-guard") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterprise-rag.selectorLabels" (dict "ctx" . "component" "vllm-guard") | nindent 8 }}
+    spec:
+      {{- if .Values.gpuOperator.runtimeClassName }}
+      runtimeClassName: {{ .Values.gpuOperator.runtimeClassName }}
+      {{- end }}
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.vllmGuard.shmSizeGi }}Gi
+        {{- if .Values.vllmGuard.hfCache.enabled }}
+        - name: hf-cache
+          {{- if .Values.vllmGuard.hfCache.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "enterprise-rag.fullname" . }}-vllm-guard-hf
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+      containers:
+        - name: vllm-guard
+          image: "{{ .Values.vllmGuard.image.repository }}:{{ .Values.vllmGuard.image.tag }}"
+          imagePullPolicy: {{ .Values.vllmGuard.image.pullPolicy }}
+          args:
+            {{- toYaml .Values.vllmGuard.args | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            {{- include "enterprise-rag.hfTokenEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            {{- if .Values.vllmGuard.hfCache.enabled }}
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /v1/models
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /v1/models
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.vllmGuard.resources | nindent 12 }}
+      {{- with .Values.vllmGuard.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.vllmGuard.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.vllmGuard.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if and .Values.vllmGuard.hfCache.enabled .Values.vllmGuard.hfCache.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "enterprise-rag.fullname" . }}-vllm-guard-hf
+  labels:
+    {{- include "enterprise-rag.componentLabels" (dict "ctx" . "component" "vllm-guard") | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.vllmGuard.hfCache.persistence.size }}
+  {{- with .Values.vllmGuard.hfCache.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}

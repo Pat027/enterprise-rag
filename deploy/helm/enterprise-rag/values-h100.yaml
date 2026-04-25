@@ -1,0 +1,94 @@
+# H100 profile.
+#
+# Notes:
+#   - H100 has native FP8 tensor cores too, but for an 8B model running TP=1
+#     on an H100 the BF16 path is plenty fast, simpler, and avoids the small
+#     accuracy hit from FP8 weight quant. We keep FP8 KV cache (decode is
+#     KV-bound) but drop weight FP8.
+#   - More VRAM headroom (80 GB on H100 vs 48 GB on L40S) → bump
+#     gpu-memory-utilization to 0.92 and increase max-model-len.
+#   - Spec decoding kept on; it's a pure throughput win on H100 too.
+
+vllmGen:
+  args:
+    - "--model=meta-llama/Llama-3.1-8B-Instruct"
+    - "--dtype=bfloat16"
+    - "--kv-cache-dtype=fp8"
+    - "--enable-prefix-caching"
+    - "--max-model-len=8192"
+    - "--gpu-memory-utilization=0.92"
+    - "--speculative-model=meta-llama/Llama-3.2-1B-Instruct"
+    - "--num-speculative-tokens=5"
+    - "--port=8000"
+  resources:
+    requests:
+      cpu: "4"
+      memory: "48Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "16"
+      memory: "80Gi"
+      nvidia.com/gpu: 1
+  hfCache:
+    persistence:
+      enabled: true
+      size: 100Gi
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-H100-80GB-HBM3
+
+vllmGuard:
+  args:
+    - "--model=meta-llama/Llama-Guard-3-8B"
+    - "--dtype=bfloat16"
+    - "--kv-cache-dtype=fp8"
+    - "--enable-prefix-caching"
+    - "--max-model-len=2048"
+    - "--gpu-memory-utilization=0.92"
+    - "--port=8000"
+  resources:
+    requests:
+      cpu: "4"
+      memory: "32Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "16"
+      memory: "64Gi"
+      nvidia.com/gpu: 1
+  hfCache:
+    persistence:
+      enabled: true
+      size: 50Gi
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-H100-80GB-HBM3
+
+api:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "8"
+      memory: "16Gi"
+      nvidia.com/gpu: 1
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-H100-80GB-HBM3
+
+config:
+  VLLM_GEN_MODEL: "meta-llama/Llama-3.1-8B-Instruct"
+  EMBEDDER_DEVICE: "cuda"
+  SAFETY_OPENAI_MODERATION: "true"
+  SAFETY_LLAMAGUARD: "true"
+  SAFETY_CONSTITUTIONAL: "true"
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+
+qdrant:
+  persistence:
+    enabled: true
+    size: 200Gi

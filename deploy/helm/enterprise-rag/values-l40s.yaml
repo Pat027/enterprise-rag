@@ -1,0 +1,77 @@
+# L40S profile — mirrors the reference docker-compose deployment.
+# Llama 3.1 8B FP8 + Llama 3.2 1B speculative draft, LlamaGuard 3 8B FP8 KV cache.
+
+vllmGen:
+  args:
+    - "--model=neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8-dynamic"
+    - "--kv-cache-dtype=fp8"
+    - "--enable-prefix-caching"
+    - "--max-model-len=4096"
+    - "--gpu-memory-utilization=0.80"
+    - "--speculative-model=meta-llama/Llama-3.2-1B-Instruct"
+    - "--num-speculative-tokens=5"
+    - "--port=8000"
+  resources:
+    requests:
+      cpu: "2"
+      memory: "32Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "8"
+      memory: "48Gi"
+      nvidia.com/gpu: 1
+  hfCache:
+    persistence:
+      enabled: true
+      size: 100Gi
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-L40S
+
+vllmGuard:
+  args:
+    - "--model=meta-llama/Llama-Guard-3-8B"
+    - "--kv-cache-dtype=fp8"
+    - "--enable-prefix-caching"
+    - "--max-model-len=2048"
+    - "--gpu-memory-utilization=0.55"
+    - "--port=8000"
+  resources:
+    requests:
+      cpu: "2"
+      memory: "24Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "8"
+      memory: "32Gi"
+      nvidia.com/gpu: 1
+  hfCache:
+    persistence:
+      enabled: true
+      size: 50Gi
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-L40S
+
+api:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+      nvidia.com/gpu: 1
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-L40S
+
+config:
+  EMBEDDER_DEVICE: "cuda"
+  SAFETY_OPENAI_MODERATION: "true"
+  SAFETY_LLAMAGUARD: "true"
+  SAFETY_CONSTITUTIONAL: "true"
+
+qdrant:
+  persistence:
+    enabled: true
+    size: 100Gi
