@@ -190,14 +190,22 @@ latency are all on the dashboards out of the box.
 
 ## Roadmap
 
-- [ ] Frontend (Next.js + shadcn/ui)
-- [ ] Hybrid search (BM25 + dense)
-- [ ] Streaming responses
+Completed:
+- [x] Frontend (Next.js + shadcn/ui) — see `frontend/`
+- [x] Streaming responses (SSE on `/query/stream`)
+- [x] Bearer-token auth + in-memory rate limiting
+- [x] Hybrid search (BM25 + dense, RRF fusion)
+- [x] Speculative decoding with Llama 3.2 1B draft (see `docs/vllm-optimization.md` §6)
+- [x] OpenTelemetry traces + Prometheus metrics + Grafana dashboards (see `deploy/observability/`)
+- [x] RAGAS evaluation harness with committed baseline (see `evals/`)
+- [x] Helm chart for k8s with l40s/h100/cpu-dev profiles (see `deploy/helm/`)
+- [x] CI on every push (lint, type-compile, compose-validate, pytest)
+
+Still on the list:
 - [ ] FlashInfer attention backend (custom image with `flashinfer-python`)
-- [ ] Speculative decoding with Llama 3.2 1B draft model
-- [ ] OpenTelemetry → Grafana dashboard
-- [ ] RAGAS evaluation harness
+- [ ] EAGLE draft model as a comparison row in the optimization doc
 - [ ] Multi-collection routing
+- [ ] Long-context profile (16K+) for legal/medical workloads
 
 ## License
 
